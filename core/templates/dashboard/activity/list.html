@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+
+{% macro status_badge(status) %}
+  {% if status == 'pending' %}
+    <span class="badge badge-inactive" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;"><i class="mdi mdi-clock-outline" style="font-size:0.75rem;"></i>pending</span>
+  {% elif status == 'running' %}
+    <span class="badge badge-running" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;"><i class="mdi mdi-loading mdi-spin" style="font-size:0.75rem;"></i>running</span>
+  {% elif status == 'success' %}
+    <span class="badge badge-success" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;"><i class="mdi mdi-check-circle" style="font-size:0.75rem;"></i>success</span>
+  {% elif status == 'failed' %}
+    <span class="badge badge-failed" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;"><i class="mdi mdi-alert-circle" style="font-size:0.75rem;"></i>failed</span>
+  {% elif status == 'cancelled' %}
+    <span class="badge badge-cancelled" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;"><i class="mdi mdi-cancel" style="font-size:0.75rem;"></i>cancelled</span>
+  {% else %}
+    <span class="badge badge-inactive" style="font-size:0.68rem;">{{ status }}</span>
+  {% endif %}
+{% endmacro %}
+
+{% block title %}Activity{% endblock %}
+{% block page_title %}Activity{% endblock %}
+{% block breadcrumb_tail %}<span class="breadcrumb-sep">/</span><span class="breadcrumb-item">activity</span>{% endblock %}
+
+{% set active_page = 'activity' %}
+
+{% block topbar_actions %}
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <select id="filter-type" class="form-input" style="padding:5px 10px;font-size:0.68rem;min-width:100px;" onchange="applyFilters()">
+      <option value="">Tous les types</option>
+      <option value="python">Python</option>
+      <option value="bash">Bash</option>
+      <option value="translate">Translate</option>
+      <option value="translate_file">Translate File</option>
+    </select>
+    <select id="filter-status" class="form-input" style="padding:5px 10px;font-size:0.68rem;min-width:110px;" onchange="applyFilters()">
+      <option value="">Tous les statuts</option>
+      <option value="pending">Pending</option>
+      <option value="running">Running</option>
+      <option value="success">Success</option>
+      <option value="failed">Failed</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+    <select id="filter-source" class="form-input" style="padding:5px 10px;font-size:0.68rem;min-width:100px;" onchange="applyFilters()">
+      <option value="">Toutes les sources</option>
+      <option value="user">User</option>
+      <option value="agent">Agent</option>
+      <option value="system">System</option>
+    </select>
+    <button onclick="cleanupTasks()" class="btn btn-ghost btn-sm" style="gap:4px;">
+      <i class="mdi mdi-broom"></i> Nettoyer
+    </button>
+  </div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Toast container -->
+<div id="toast-container" style="position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:9999;pointer-events:none;"></div>
+
+<div class="card" style="overflow:visible;">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="card-title" id="task-count-label">{{ tasks | length }} task(s)</div>
+    </div>
+    <div id="sse-status" style="font-size:0.65rem;font-family:'Share Tech Mono',monospace;color:var(--text-dim);display:flex;align-items:center;gap:5px;">
+      <span id="sse-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-dim);display:inline-block;"></span>
+      <span id="sse-label">CONNECTING…</span>
+    </div>
+  </div>
+
+  {% if tasks %}
+  <div style="overflow-x:auto;">
+    <table id="activity-table" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.7rem;color:var(--text-dim);">
+          <th style="text-align:left;padding:10px 16px;white-space:nowrap;">Nom</th>
+          <th style="text-align:left;padding:10px 16px;">Type</th>
+          <th style="text-align:left;padding:10px 16px;">Statut</th>
+          <th style="text-align:left;padding:10px 16px;">Source</th>
+          <th style="text-align:left;padding:10px 16px;min-width:120px;">Progression</th>
+          <th style="text-align:left;padding:10px 16px;white-space:nowrap;">Durée</th>
+          <th style="text-align:left;padding:10px 16px;white-space:nowrap;">Date</th>
+          <th style="text-align:right;padding:10px 16px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="activity-tbody">
+        {% for task in tasks %}
+        {% set tid = task.id | string %}
+        {% set src_raw = task.triggered_by or 'system' %}
+        {% if src_raw.startswith('user:') %}{% set src_label = 'User' %}{% set src_type = 'user' %}
+        {% elif src_raw.startswith('agent:') %}{% set src_label = 'Agent' %}{% set src_type = 'agent' %}
+        {% else %}{% set src_label = 'System' %}{% set src_type = 'system' %}{% endif %}
+        <tr id="row-{{ tid }}"
+            data-task-id="{{ tid }}"
+            data-type="{{ task.type }}"
+            data-status="{{ task.status }}"
+            data-src="{{ src_type }}"
+            data-params="{{ task.params | tojson | e if task.params else '{}' }}"
+            style="border-bottom:1px solid rgba(255,255,255,0.03);cursor:pointer;"
+            onclick="toggleError('{{ tid }}')">
+
+          <!-- Nom -->
+          <td style="padding:10px 16px;max-width:220px;">
+            <div style="display:flex;flex-direction:column;gap:3px;">
+              <span class="mono" style="font-size:0.75rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;" title="{{ task.name or task.type }}">
+                {{ (task.name or task.type) | truncate(32, True, '…') }}
+              </span>
+              <span class="mono dim" style="font-size:0.62rem;">{{ tid[:8] }}…</span>
+            </div>
+          </td>
+
+          <!-- Type -->
+          <td style="padding:10px 16px;">
+            <span class="badge badge-inactive" style="font-size:0.65rem;text-transform:uppercase;">{{ task.type }}</span>
+          </td>
+
+          <!-- Status -->
+          <td style="padding:10px 16px;" id="status-{{ tid }}">
+            {{ status_badge(task.status) }}
+          </td>
+
+          <!-- Source -->
+          <td style="padding:10px 16px;">
+            <span class="mono" style="font-size:0.7rem;color:var(--text-dim);">{{ src_label }}</span>
+          </td>
+
+          <!-- Progression -->
+          <td style="padding:10px 16px;" id="progress-{{ tid }}">
+            {% if task.status in ('pending', 'running') %}
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:100px;">
+              <div style="background:rgba(255,255,255,0.08);border-radius:3px;height:4px;overflow:hidden;">
+                <div id="pbar-{{ tid }}" style="background:var(--cyan);height:100%;width:{{ task.progress or 0 }}%;transition:width 0.4s ease;"></div>
+              </div>
+              <span id="pdetail-{{ tid }}" class="mono dim" style="font-size:0.62rem;">{{ task.progress_detail or (task.progress | string + '%') }}</span>
+            </div>
+            {% elif task.status == 'success' and task.result %}
+              {% set out = task.result.get('output_path') or task.result.get('output', '') %}
+              {% if out %}
+              <a href="/dashboard/w/{{ workspace_slug }}/files?path={{ out | urlencode }}"
+                 class="mono" style="font-size:0.68rem;color:var(--cyan);text-decoration:none;"
+                 onclick="event.stopPropagation();" title="{{ out }}">
+                <i class="mdi mdi-file-outline" style="vertical-align:middle;"></i>
+                {{ out.split('/')[-1] | truncate(24, True, '…') }}
+              </a>
+              {% else %}
+              <span class="mono dim" style="font-size:0.68rem;">—</span>
+              {% endif %}
+            {% else %}
+            <span class="mono dim" style="font-size:0.68rem;">—</span>
+            {% endif %}
+          </td>
+
+          <!-- Durée -->
+          <td style="padding:10px 16px;white-space:nowrap;">
+            <span class="mono dim" style="font-size:0.7rem;">
+              {% if task.started_at and task.completed_at %}
+                {% set secs = (task.completed_at - task.started_at).seconds %}
+                {% if secs < 60 %}{{ secs }}s{% else %}{{ (secs // 60) }}m{{ (secs % 60) }}s{% endif %}
+              {% elif task.started_at %}
+                <span style="color:var(--purple);">en cours</span>
+              {% else %}
+                —
+              {% endif %}
+            </span>
+          </td>
+
+          <!-- Date -->
+          <td style="padding:10px 16px;white-space:nowrap;">
+            <span class="mono dim" style="font-size:0.7rem;">{{ task.created_at.strftime('%m-%d %H:%M') if task.created_at else '—' }}</span>
+          </td>
+
+          <!-- Actions -->
+          <td style="padding:10px 16px;text-align:right;" onclick="event.stopPropagation();">
+            <div id="actions-{{ tid }}" style="display:flex;gap:4px;justify-content:flex-end;">
+              {% if task.status in ('pending', 'running') %}
+              <button class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:0.65rem;" onclick="cancelTask('{{ tid }}')" title="Annuler">
+                <i class="mdi mdi-cancel" style="vertical-align:middle;"></i>
+              </button>
+              {% elif task.status == 'failed' %}
+              <button class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:0.65rem;" onclick="rerunTask('{{ tid }}', '{{ task.type }}', '{{ task.name or '' }}')" title="Réexécuter">
+                <i class="mdi mdi-refresh" style="vertical-align:middle;"></i>
+              </button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+
+        <!-- Error/Result detail row (hidden by default) -->
+        {% if task.error or (task.result and task.result.get('output')) %}
+        <tr id="detail-{{ tid }}" style="display:none;border-bottom:1px solid rgba(255,255,255,0.03);">
+          <td colspan="8" style="padding:0 16px 10px 32px;">
+            {% if task.error %}
+            <pre style="margin:0;font-size:0.68rem;color:#ff5f56;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto;background:rgba(255,50,80,0.05);border-radius:4px;padding:8px 12px;">{{ task.error }}</pre>
+            {% elif task.result and task.result.get('output') %}
+            <pre style="margin:0;font-size:0.68rem;color:var(--text);white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto;background:rgba(255,255,255,0.03);border-radius:4px;padding:8px 12px;">{{ task.result.get('output', '') | truncate(500) }}</pre>
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% else %}
+  <div id="empty-state" class="empty-state">
+    <div class="empty-state-icon"><i class="mdi mdi-lightning-bolt-outline" style="font-size:2.5rem;opacity:0.3;"></i></div>
+    <div class="empty-state-title">Aucune activité</div>
+    <div class="empty-state-sub">Les tâches exécutées apparaîtront ici en temps réel.</div>
+    <a href="/dashboard/w/{{ workspace_slug }}/chat" class="btn btn-ghost">◈ Aller au chat</a>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function() {
+  const SLUG = {{ workspace_slug | tojson }};
+  let taskCount = {{ tasks | length }};
+
+  // ── Status rendering ────────────────────────────────────────────────────────
+  const STATUS_CFG = {
+    pending:   { cls: 'badge-inactive', icon: 'mdi-clock-outline',  label: 'pending'   },
+    running:   { cls: 'badge-running',  icon: 'mdi-loading mdi-spin', label: 'running' },
+    success:   { cls: 'badge-success',  icon: 'mdi-check-circle',   label: 'success'   },
+    failed:    { cls: 'badge-failed',   icon: 'mdi-alert-circle',   label: 'failed'    },
+    cancelled: { cls: 'badge-cancelled',icon: 'mdi-cancel',         label: 'cancelled' },
+  };
+
+  function renderStatus(status) {
+    const cfg = STATUS_CFG[status] || STATUS_CFG.pending;
+    return `<span class="badge ${cfg.cls}" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;">
+      <i class="mdi ${cfg.icon}" style="font-size:0.75rem;"></i>${cfg.label}
+    </span>`;
+  }
+
+  // ── Toast ───────────────────────────────────────────────────────────────────
+  function showToast(msg, type) {
+    const container = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    const colors = { success: 'var(--green)', error: '#ff5f56', info: 'var(--cyan)', warn: '#f5a623' };
+    const color = colors[type] || colors.info;
+    el.style.cssText = `background:rgba(3,8,16,0.95);border:1px solid ${color};border-radius:6px;padding:10px 16px;font-family:'Share Tech Mono',monospace;font-size:0.72rem;color:${color};pointer-events:auto;max-width:320px;box-shadow:0 4px 20px rgba(0,0,0,0.4);cursor:pointer;`;
+    el.textContent = msg;
+    el.onclick = () => el.remove();
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 5000);
+  }
+
+  // ── Filters ─────────────────────────────────────────────────────────────────
+  window.applyFilters = function() {
+    const fType   = document.getElementById('filter-type').value;
+    const fStatus = document.getElementById('filter-status').value;
+    const fSrc    = document.getElementById('filter-source').value;
+    const tbody   = document.getElementById('activity-tbody');
+    if (!tbody) return;
+    let visible = 0;
+    for (const row of tbody.querySelectorAll('tr[data-task-id]')) {
+      const show = (!fType   || row.dataset.type   === fType)
+                && (!fStatus || row.dataset.status === fStatus)
+                && (!fSrc   || row.dataset.src    === fSrc);
+      row.style.display = show ? '' : 'none';
+      // also hide/show its detail row
+      const detail = document.getElementById('detail-' + row.dataset.taskId);
+      if (detail && !show) detail.style.display = 'none';
+      if (show) visible++;
+    }
+    const label = document.getElementById('task-count-label');
+    if (label) label.textContent = visible + ' task(s)';
+  };
+
+  // ── Error expand ─────────────────────────────────────────────────────────────
+  window.toggleError = function(tid) {
+    const el = document.getElementById('detail-' + tid);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' ? '' : 'none';
+  };
+
+  // ── Actions ──────────────────────────────────────────────────────────────────
+  window.cancelTask = async function(tid) {
+    const ok = await showConfirm('Annuler la tâche', 'Voulez-vous annuler cette tâche ?', { danger: true, confirmText: 'Annuler la tâche' });
+    if (!ok) return;
+    try {
+      const resp = await fetch(`/dashboard/w/${SLUG}/activity/tasks/${tid}/cancel`, { method: 'POST' });
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+      updateRow(tid, 'cancelled', 0, null);
+      showToast('Tâche annulée', 'warn');
+    } catch(e) {
+      showToast('Erreur: ' + e.message, 'error');
+    }
+  };
+
+  window.rerunTask = async function(tid, type, name) {
+    const row = document.getElementById('row-' + tid);
+    const params = row ? JSON.parse(row.dataset.params || '{}') : {};
+    try {
+      const resp = await fetch(`/dashboard/w/${SLUG}/activity/tasks/${tid}/rerun`, { method: 'POST' });
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+      const data = await resp.json();
+      showToast('Tâche relancée : ' + (data.task_id || '').slice(0,8) + '…', 'info');
+    } catch(e) {
+      showToast('Erreur: ' + e.message, 'error');
+    }
+  };
+
+  window.cleanupTasks = async function() {
+    const ok = await showConfirm('Nettoyer les tâches', 'Supprimer toutes les tâches terminées (success, failed, cancelled) ?', { danger: true, confirmText: 'Nettoyer' });
+    if (!ok) return;
+    try {
+      const resp = await fetch(`/dashboard/w/${SLUG}/activity/tasks/cleanup`, { method: 'DELETE' });
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).detail || resp.statusText);
+      const data = await resp.json();
+      // Remove rows with done statuses
+      const tbody = document.getElementById('activity-tbody');
+      if (tbody) {
+        for (const row of [...tbody.querySelectorAll('tr[data-task-id]')]) {
+          if (['success','failed','cancelled'].includes(row.dataset.status)) {
+            const detail = document.getElementById('detail-' + row.dataset.taskId);
+            if (detail) detail.remove();
+            row.remove();
+          }
+        }
+        taskCount = tbody.querySelectorAll('tr[data-task-id]').length;
+        const label = document.getElementById('task-count-label');
+        if (label) label.textContent = taskCount + ' task(s)';
+        if (taskCount === 0) showEmptyState();
+      }
+      showToast(`${data.deleted} tâche(s) supprimée(s)`, 'success');
+    } catch(e) {
+      showToast('Erreur: ' + e.message, 'error');
+    }
+  };
+
+  function showEmptyState() {
+    const card = document.querySelector('.card');
+    if (!card) return;
+    const table = card.querySelector('[style*="overflow-x"]') || card.querySelector('table');
+    if (table) table.closest('[style*="overflow-x"]') ? table.closest('[style*="overflow-x"]').remove() : table.remove();
+    const es = document.createElement('div');
+    es.className = 'empty-state';
+    es.innerHTML = `<div class="empty-state-icon"><i class="mdi mdi-lightning-bolt-outline" style="font-size:2.5rem;opacity:0.3;"></i></div>
+      <div class="empty-state-title">Aucune activité</div>
+      <div class="empty-state-sub">Les tâches exécutées apparaîtront ici en temps réel.</div>
+      <a href="/dashboard/w/${SLUG}/chat" class="btn btn-ghost">◈ Aller au chat</a>`;
+    card.appendChild(es);
+  }
+
+  // ── Row update (from SSE) ────────────────────────────────────────────────────
+  function updateRow(tid, status, progress, detail) {
+    const row = document.getElementById('row-' + tid);
+    if (!row) return;
+    row.dataset.status = status;
+
+    // Status cell
+    const sc = document.getElementById('status-' + tid);
+    if (sc) sc.innerHTML = renderStatus(status);
+
+    // Progress cell
+    const pbar = document.getElementById('pbar-' + tid);
+    const pdetail = document.getElementById('pdetail-' + tid);
+    if (pbar) pbar.style.width = progress + '%';
+    if (pdetail && detail) pdetail.textContent = detail;
+
+    // Actions cell — update based on new status
+    const actCell = document.getElementById('actions-' + tid);
+    if (actCell) {
+      if (['pending','running'].includes(status)) {
+        actCell.innerHTML = `<button class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:0.65rem;" onclick="cancelTask('${tid}')" title="Annuler"><i class="mdi mdi-cancel" style="vertical-align:middle;"></i></button>`;
+      } else if (status === 'failed') {
+        const type = row.dataset.type;
+        const name = row.querySelector('span.mono')?.title || type;
+        actCell.innerHTML = `<button class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:0.65rem;" onclick="rerunTask('${tid}','${type}','${name}')" title="Réexécuter"><i class="mdi mdi-refresh" style="vertical-align:middle;"></i></button>`;
+      } else {
+        actCell.innerHTML = '';
+      }
+    }
+
+    // Hide progress bar for finished tasks
+    const progressCell = document.getElementById('progress-' + tid);
+    if (progressCell && ['success','failed','cancelled'].includes(status)) {
+      const wrapper = progressCell.querySelector('div');
+      if (wrapper) wrapper.style.display = 'none';
+    }
+  }
+
+  function prependRow(evt) {
+    const tbody = document.getElementById('activity-tbody');
+    if (!tbody) return;
+
+    // Remove empty state if present
+    const es = document.getElementById('empty-state');
+    if (es) es.remove();
+
+    const tid = evt.task_id;
+    if (!tid || document.getElementById('row-' + tid)) return;
+
+    const src = (evt.source || 'system');
+    const srcType = src.startsWith('user:') ? 'user' : src.startsWith('agent:') ? 'agent' : 'system';
+    const srcLabel = srcType.charAt(0).toUpperCase() + srcType.slice(1);
+    const name = evt.data?.name || evt.type || '—';
+    const type = evt.data?.type || '—';
+
+    const tr = document.createElement('tr');
+    tr.id = 'row-' + tid;
+    tr.dataset.taskId = tid;
+    tr.dataset.type   = type;
+    tr.dataset.status = 'pending';
+    tr.dataset.src    = srcType;
+    tr.dataset.params = JSON.stringify(evt.data || {});
+    tr.style.cssText  = 'border-bottom:1px solid rgba(255,255,255,0.03);cursor:pointer;';
+    tr.setAttribute('onclick', `toggleError('${tid}')`);
+
+    const now = new Date().toLocaleString('fr-FR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',','');
+    tr.innerHTML = `
+      <td style="padding:10px 16px;max-width:220px;">
+        <div style="display:flex;flex-direction:column;gap:3px;">
+          <span class="mono" style="font-size:0.75rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;" title="${name}">${name.length > 32 ? name.slice(0,32)+'…' : name}</span>
+          <span class="mono dim" style="font-size:0.62rem;">${tid.slice(0,8)}…</span>
+        </div>
+      </td>
+      <td style="padding:10px 16px;"><span class="badge badge-inactive" style="font-size:0.65rem;text-transform:uppercase;">${type}</span></td>
+      <td style="padding:10px 16px;" id="status-${tid}">${renderStatus('pending')}</td>
+      <td style="padding:10px 16px;"><span class="mono" style="font-size:0.7rem;color:var(--text-dim);">${srcLabel}</span></td>
+      <td style="padding:10px 16px;" id="progress-${tid}">
+        <div style="display:flex;flex-direction:column;gap:3px;min-width:100px;">
+          <div style="background:rgba(255,255,255,0.08);border-radius:3px;height:4px;overflow:hidden;">
+            <div id="pbar-${tid}" style="background:var(--cyan);height:100%;width:0%;transition:width 0.4s ease;"></div>
+          </div>
+          <span id="pdetail-${tid}" class="mono dim" style="font-size:0.62rem;">0%</span>
+        </div>
+      </td>
+      <td style="padding:10px 16px;white-space:nowrap;"><span class="mono dim" style="font-size:0.7rem;">—</span></td>
+      <td style="padding:10px 16px;white-space:nowrap;"><span class="mono dim" style="font-size:0.7rem;">${now}</span></td>
+      <td style="padding:10px 16px;text-align:right;" onclick="event.stopPropagation();">
+        <div id="actions-${tid}" style="display:flex;gap:4px;justify-content:flex-end;">
+          <button class="btn btn-ghost btn-sm" style="padding:4px 8px;font-size:0.65rem;" onclick="cancelTask('${tid}')" title="Annuler"><i class="mdi mdi-cancel" style="vertical-align:middle;"></i></button>
+        </div>
+      </td>`;
+    tbody.insertBefore(tr, tbody.firstChild);
+    taskCount++;
+    const label = document.getElementById('task-count-label');
+    if (label) label.textContent = taskCount + ' task(s)';
+  }
+
+  // ── SSE connection ───────────────────────────────────────────────────────────
+  function connectSSE() {
+    const dot   = document.getElementById('sse-dot');
+    const label = document.getElementById('sse-label');
+    const es    = new EventSource(`/dashboard/w/${SLUG}/activity/stream`);
+
+    es.onopen = () => {
+      if (dot)   { dot.style.background = 'var(--cyan)'; dot.style.boxShadow = '0 0 6px var(--cyan)'; }
+      if (label) label.textContent = 'LIVE';
+    };
+
+    es.onerror = () => {
+      if (dot)   { dot.style.background = 'var(--text-dim)'; dot.style.boxShadow = 'none'; }
+      if (label) label.textContent = 'RECONNECTING…';
+    };
+
+    es.onmessage = (e) => {
+      let evt;
+      try { evt = JSON.parse(e.data); } catch { return; }
+      const tid  = evt.task_id;
+      const type = evt.type;
+
+      if (type === 'task_created') {
+        prependRow(evt);
+        showToast('Tâche créée : ' + (evt.data?.name || tid?.slice(0,8) || ''), 'info');
+      } else if (type === 'task_progress') {
+        const pct    = evt.data?.progress ?? evt.data?.current ?? 0;
+        const total  = evt.data?.total ?? 100;
+        const detail = evt.data?.detail || evt.data?.progress_detail || null;
+        const pval   = total > 0 ? Math.round((pct / total) * 100) : pct;
+        updateRow(tid, 'running', pval, detail || pval + '%');
+      } else if (type === 'task_done') {
+        updateRow(tid, 'success', 100, '100%');
+        showToast('Tâche terminée ✓', 'success');
+      } else if (type === 'task_error') {
+        updateRow(tid, 'failed', 0, null);
+        const row = document.getElementById('row-' + tid);
+        // Inject error detail row if not present
+        if (row && !document.getElementById('detail-' + tid)) {
+          const dr = document.createElement('tr');
+          dr.id = 'detail-' + tid;
+          dr.style.cssText = 'border-bottom:1px solid rgba(255,255,255,0.03);';
+          dr.innerHTML = `<td colspan="8" style="padding:0 16px 10px 32px;">
+            <pre style="margin:0;font-size:0.68rem;color:#ff5f56;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto;background:rgba(255,50,80,0.05);border-radius:4px;padding:8px 12px;">${evt.data?.error || 'Erreur inconnue'}</pre>
+          </td>`;
+          row.after(dr);
+        }
+        showToast('Erreur tâche', 'error');
+      } else if (type === 'task_cancelled') {
+        updateRow(tid, 'cancelled', 0, null);
+      } else if (type === 'app_started') {
+        showToast('App démarrée : ' + (evt.data?.app || ''), 'info');
+      } else if (type === 'app_stopped') {
+        showToast('App arrêtée : ' + (evt.data?.app || ''), 'warn');
+      } else if (type === 'app_crashed') {
+        showToast('App crash : ' + (evt.data?.app || ''), 'error');
+      }
+    };
+  }
+
+  connectSSE();
+})();
+</script>
+{% endblock %}

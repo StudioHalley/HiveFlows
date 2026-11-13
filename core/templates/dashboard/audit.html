@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+{% block breadcrumb_tail %}<span class="breadcrumb-sep">/</span><span class="breadcrumb-item">audit</span>{% endblock %}
+
+{% block content %}
+
+<div class="card mb-16">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div class="card-title">Journal d'audit ({{ total }} entrees)</div>
+  </div>
+
+  <!-- Filters -->
+  <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+    <form method="get" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;width:100%;">
+      <div>
+        <label class="form-label" style="font-size:0.65rem;">Action</label>
+        <select name="action" class="form-input" style="min-width:140px;">
+          <option value="">Toutes</option>
+          {% for a in available_actions %}
+          <option value="{{ a }}" {% if a == filter_action %}selected{% endif %}>{{ a }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" style="font-size:0.65rem;">Ressource</label>
+        <select name="resource_type" class="form-input" style="min-width:120px;">
+          <option value="">Toutes</option>
+          {% for rt in available_resource_types %}
+          <option value="{{ rt }}" {% if rt == filter_resource_type %}selected{% endif %}>{{ rt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" style="font-size:0.65rem;">Utilisateur</label>
+        <select name="user_id" class="form-input" style="min-width:140px;">
+          <option value="">Tous</option>
+          {% for u in members %}
+          <option value="{{ u.user_id }}" {% if u.user_id|string == filter_user_id %}selected{% endif %}>{{ u.display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Filtrer</button>
+      {% if filter_action or filter_resource_type or filter_user_id %}
+      <a href="/dashboard/w/{{ workspace_slug }}/audit" class="btn btn-ghost btn-sm">Reset</a>
+      {% endif %}
+    </form>
+  </div>
+
+  <div class="card-body" style="padding:0;">
+    {% if logs %}
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.7rem;color:var(--text-dim);">
+          <th style="text-align:left;padding:10px 16px;">Date</th>
+          <th style="text-align:left;padding:10px 16px;">Action</th>
+          <th style="text-align:left;padding:10px 16px;">Utilisateur</th>
+          <th style="text-align:left;padding:10px 16px;">Ressource</th>
+          <th style="text-align:left;padding:10px 16px;">Details</th>
+          <th style="text-align:left;padding:10px 16px;">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+          <td style="padding:10px 16px;white-space:nowrap;font-size:0.75rem;color:var(--text-dim);">
+            {{ log.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+          </td>
+          <td style="padding:10px 16px;">
+            <span class="badge badge-active" style="font-size:0.68rem;">{{ log.action }}</span>
+          </td>
+          <td style="padding:10px 16px;font-size:0.75rem;">
+            {{ user_map.get(log.user_id|string, '—') }}
+          </td>
+          <td style="padding:10px 16px;font-size:0.75rem;color:var(--text-dim);">
+            {% if log.resource_type %}{{ log.resource_type }}{% endif %}
+            {% if log.resource_id %}<br><code style="font-size:0.65rem;">{{ log.resource_id[:16] }}{% if log.resource_id|length > 16 %}...{% endif %}</code>{% endif %}
+          </td>
+          <td style="padding:10px 16px;font-size:0.7rem;color:var(--text-dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;">
+            {% if log.details %}
+              {% for k, v in log.details.items() %}
+                <span style="color:var(--cyan);">{{ k }}</span>={{ v }}{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td style="padding:10px 16px;font-size:0.7rem;color:var(--text-dim);">
+            {{ log.ip_address or '—' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    {% if total > limit %}
+    <div style="padding:12px 16px;display:flex;justify-content:center;gap:8px;">
+      {% if offset > 0 %}
+      <a href="?offset={{ offset - limit }}{% if filter_action %}&action={{ filter_action }}{% endif %}{% if filter_resource_type %}&resource_type={{ filter_resource_type }}{% endif %}{% if filter_user_id %}&user_id={{ filter_user_id }}{% endif %}"
+         class="btn btn-ghost btn-sm">← Precedent</a>
+      {% endif %}
+      <span style="font-size:0.75rem;color:var(--text-dim);padding:6px 0;">
+        {{ offset + 1 }}–{{ [offset + limit, total] | min }} sur {{ total }}
+      </span>
+      {% if offset + limit < total %}
+      <a href="?offset={{ offset + limit }}{% if filter_action %}&action={{ filter_action }}{% endif %}{% if filter_resource_type %}&resource_type={{ filter_resource_type }}{% endif %}{% if filter_user_id %}&user_id={{ filter_user_id }}{% endif %}"
+         class="btn btn-ghost btn-sm">Suivant →</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="padding:32px;text-align:center;color:var(--text-dim);font-size:0.8rem;">
+      Aucune entree d'audit{% if filter_action or filter_resource_type or filter_user_id %} avec ces filtres{% endif %}.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

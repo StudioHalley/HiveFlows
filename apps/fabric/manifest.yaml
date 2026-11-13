@@ -1,0 +1,95 @@
+name: Fabric
+slug: fabric
+version: "1.0"
+description: "Exécute des patterns d'analyse et de transformation de texte via le CLI Fabric (danielmiessler/fabric)"
+image: hiveflows/fabric:latest
+type: backend
+ingress: none
+port: 8080
+
+resources:
+  memory: 512m
+  cpus: "1.0"
+
+env_inject:
+  LLM_BASE_URL: "http://core:8000/internal/v1/{workspace_id}"
+  LLM_API_KEY: "{workspace_id}"
+
+mounts:
+  - host: "."
+    container: "/workspace"
+    description: "Workspace — les fichiers de sortie sont écrits dans workspace/fabric/"
+
+tools:
+  - name: fabric_run
+    description: >
+      Run a Fabric pattern on text or a URL. Fabric applies an AI prompt pattern to produce
+      structured output (summaries, analyses, extractions, etc.).
+      Returns a task_id immediately — processing runs in the background.
+      Poll fabric_get_result with the task_id to retrieve the output file path when done.
+
+      Common patterns: summarize, extract_wisdom, analyze_claims, extract_ideas,
+      improve_writing, create_summary, explain_code, review_code, create_tags,
+      analyze_paper, analyze_prose, find_logical_fallacies, extract_recommendations,
+      create_keynote, write_essay, translate, fix_typos, humanize, rate_content,
+      youtube_summary, extract_article_wisdom, create_micro_summary, analyze_threat_report,
+      extract_insights, extract_questions, extract_references, explain_terms,
+      summarize_meeting, create_quiz, create_flash_cards, create_mermaid_visualization.
+
+      Use fabric_list_patterns to get the full list of 252 available patterns.
+
+      Model/vendor can be overridden per-request (default: OpenRouter / openai/gpt-4o-mini).
+      To use a different model, pass vendor="OpenRouter" and model="anthropic/claude-3.5-haiku" (or any OpenRouter model ID).
+    endpoint: /run
+    method: POST
+    schema:
+      pattern:
+        type: string
+        required: true
+        description: "Fabric pattern name (e.g. summarize, extract_wisdom, analyze_claims)"
+      input_text:
+        type: string
+        required: false
+        description: "Text to process (piped via stdin). Provide this OR input_url, not both."
+      input_url:
+        type: string
+        required: false
+        description: "URL for Fabric to fetch and process directly (e.g. a webpage, GitHub repo, article). Provide this OR input_text."
+      model:
+        type: string
+        required: false
+        description: "Override the LLM model (OpenRouter model ID, e.g. openai/gpt-4o, anthropic/claude-3.5-haiku). Default: openai/gpt-4o-mini"
+      vendor:
+        type: string
+        required: false
+        description: "Override the LLM vendor. Default: OpenRouter"
+      output_filename:
+        type: string
+        required: false
+        description: "Custom filename for the output markdown file in workspace/fabric/. Default: <pattern>_<task_id>.md"
+
+  - name: fabric_list_patterns
+    description: >
+      List all available Fabric patterns (252 patterns baked into the image).
+      Returns the full list of pattern names. Use this to discover what patterns
+      are available before calling fabric_run.
+    endpoint: /patterns
+    method: GET
+    schema: {}
+
+  - name: fabric_get_result
+    description: >
+      Poll the result of a fabric_run task. Pass the task_id returned by fabric_run.
+      Returns status ('pending', 'running', 'success', 'error') and, when done,
+      the output_path (markdown file in the workspace).
+      Call repeatedly every few seconds until status is 'success' or 'error'.
+      On success: output_path contains the result markdown file path.
+    endpoint: /result
+    method: GET
+    schema:
+      task_id:
+        type: string
+        required: true
+        description: "task_id returned by fabric_run"
+
+icon: mdi-texture-box

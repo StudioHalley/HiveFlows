@@ -1,0 +1,724 @@
+{% extends "base.html" %}
+
+{% block title %}Apps — {{ workspace.name }}{% endblock %}
+{% block page_title %}Apps{% endblock %}
+{% block breadcrumb_tail %}
+  <span class="breadcrumb-sep">/</span>
+  <span class="breadcrumb-item">{{ workspace_slug }}</span>
+  <span class="breadcrumb-sep">/</span>
+  <span class="breadcrumb-item">apps</span>
+{% endblock %}
+
+{% set active_page = 'apps' %}
+
+{% block head %}
+<style>
+.apps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.app-card {
+  background: rgba(6, 13, 26, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+.app-card:hover { border-color: var(--border-hover); }
+
+.app-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.app-icon {
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,245,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1.3rem;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+.app-info { flex: 1; min-width: 0; }
+.app-name { font-weight: 600; font-size: 0.9rem; }
+.app-image { font-size: 0.68rem; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maj-badge {
+  display: inline-block; margin-left: 6px; vertical-align: middle;
+  font-size: 0.6rem; font-family: 'Share Tech Mono', monospace;
+  padding: 1px 7px; border-radius: 999px;
+  color: var(--green); border: 1px solid rgba(0,255,140,0.45);
+  text-shadow: 0 0 6px rgba(0,255,140,0.5);
+}
+
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; margin-right: 5px; flex-shrink: 0;
+}
+.status-dot.running  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+.status-dot.stopped  { background: #ff8c00; }
+.status-dot.pulling  { background: var(--cyan); animation: pulse 1s infinite; }
+.status-dot.error,
+.status-dot.crashed  { background: #ff4466; }
+.status-label { font-size: 0.72rem; font-family: 'Share Tech Mono', monospace; }
+
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+.app-card-body { padding: 12px 16px; }
+.app-description { font-size: 0.77rem; color: var(--text-dim); margin-bottom: 12px; min-height: 18px; }
+
+.app-metrics { display: flex; gap: 12px; margin-bottom: 12px; }
+.metric-bar { flex: 1; }
+.metric-label { font-size: 0.65rem; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; margin-bottom: 3px; display: flex; justify-content: space-between; }
+.metric-track { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+.metric-fill { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+.metric-fill.cpu { background: var(--cyan); }
+.metric-fill.mem { background: var(--purple); }
+
+.app-card-actions {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.app-log-panel {
+  display: none;
+  border-top: 1px solid var(--border);
+}
+.app-log-panel.open { display: block; }
+.log-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.3);
+  font-size: 0.72rem; font-family: 'Share Tech Mono', monospace; color: var(--text-dim);
+}
+.log-body {
+  height: 200px; overflow-y: auto;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.4);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #a0c0d0;
+}
+.log-body p { margin: 0; }
+.log-body::-webkit-scrollbar { width: 4px; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* Iframe panel */
+.app-iframe-panel {
+  display: none;
+  border-top: 1px solid var(--border);
+}
+.app-iframe-panel.open { display: block; }
+.app-iframe-panel iframe {
+  width: 100%; height: 480px; border: none;
+  background: #fff;
+}
+
+/* Fullscreen mode — covers main area, sidebar stays visible */
+.app-iframe-panel.fullscreen {
+  position: fixed;
+  left: var(--sidebar-w);
+  top: 0; right: 0; bottom: 0;
+  z-index: 150;
+  border-top: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--dark2);
+}
+.app-iframe-panel.fullscreen .log-header {
+  display: none;
+}
+.app-iframe-panel.fullscreen iframe {
+  flex: 1;
+  height: 100%;
+}
+/* Mobile topbar inside fullscreen iframe panel */
+.iframe-mobile-topbar {
+  display: none;
+}
+@media (max-width: 768px) {
+  .app-iframe-panel.fullscreen {
+    left: 0;
+    z-index: 155;
+  }
+  .app-iframe-panel.fullscreen .iframe-mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    background: var(--dark2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+}
+
+/* Task progress tray */
+#task-progress-tray {
+  position: fixed;
+  bottom: 20px; right: 20px;
+  z-index: 180;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+}
+.task-toast {
+  background: rgba(6,13,26,0.95);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  animation: slideIn 0.2s ease;
+}
+.task-toast.done  { border-color: var(--green); }
+.task-toast.error { border-color: #ff4466; }
+.task-toast-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.task-toast-title { color: var(--cyan); }
+.task-toast-close {
+  cursor: pointer; color: var(--text-dim); background: none; border: none;
+  font-size: 1rem; line-height: 1; padding: 0;
+}
+.task-toast-step { color: var(--text-dim); margin-bottom: 6px; }
+.task-toast-bar-track {
+  height: 3px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden;
+}
+.task-toast-bar-fill {
+  height: 100%; background: var(--cyan); border-radius: 2px; transition: width 0.4s ease;
+}
+@keyframes slideIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+
+/* Env modal */
+.env-modal {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  align-items: center; justify-content: center;
+}
+.env-modal.open { display: flex; }
+.env-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+}
+.env-box {
+  position: relative; z-index: 1;
+  background: var(--dark2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 420px; max-width: 95vw;
+  max-height: 80vh; overflow-y: auto;
+}
+.env-box-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--cyan);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.env-box-body { padding: 16px 20px; }
+.env-box-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+.empty-state {
+  text-align: center; padding: 80px 20px;
+  color: var(--text-dim);
+}
+.empty-state .empty-icon { font-size: 3rem; margin-bottom: 16px; opacity: 0.4; }
+.empty-state h3 { font-size: 1rem; margin-bottom: 8px; color: var(--text); }
+.empty-state p { font-size: 0.82rem; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+  <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/check-updates" style="display:inline;">
+    <button type="submit" class="btn btn-ghost btn-sm" title="Rafraîchir les versions disponibles depuis les manifests">
+      <i class="mdi mdi-sync"></i> Vérifier les MAJ
+    </button>
+  </form>
+  <a href="/dashboard/w/{{ workspace_slug }}/apps/catalog" class="btn btn-primary btn-sm">
+    <i class="mdi mdi-plus"></i> Installer une app
+  </a>
+{% endblock %}
+
+{% block content %}
+
+{% if not apps %}
+<div class="empty-state">
+  <div class="empty-icon"><i class="mdi mdi-apps" style="color:var(--cyan);"></i></div>
+  <h3>Aucune app installée</h3>
+  <p>Parcourez le catalogue pour installer votre première app.</p>
+  <a href="/dashboard/w/{{ workspace_slug }}/apps/catalog" class="btn btn-primary" style="margin-top:20px;">
+    <i class="mdi mdi-store-outline"></i> Voir le catalogue
+  </a>
+</div>
+{% else %}
+
+<div class="apps-grid" id="apps-grid">
+{% for app in apps %}
+{% set sid = app.app_slug | replace('-', '_') %}
+<div class="app-card" id="card-{{ app.app_slug }}" data-slug="{{ app.app_slug }}">
+
+  <!-- Header -->
+  <div class="app-card-header">
+    <div class="app-icon">
+      {% if app.app_icon %}
+        <i class="mdi {{ app.app_icon }}"></i>
+      {% else %}
+        <i class="mdi mdi-cube-outline"></i>
+      {% endif %}
+    </div>
+    <div class="app-info">
+      <div class="app-name">
+        {{ app.app_name }}
+        {% if app.update_available %}
+        <span class="maj-badge" title="Installé v{{ app.installed_version }} → disponible v{{ app.catalog_version }}">
+          <i class="mdi mdi-arrow-up-bold"></i> MAJ v{{ app.catalog_version }}
+        </span>
+        {% endif %}
+      </div>
+      <div class="app-image">{{ app.app_image }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;" id="status-wrap-{{ app.app_slug }}">
+      <span class="status-dot {{ app.status }}" id="dot-{{ app.app_slug }}"></span>
+      <span class="status-label" id="status-{{ app.app_slug }}">{{ app.status }}</span>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="app-card-body">
+    <div class="app-description">{{ app.description or '' }}</div>
+
+    <!-- Metrics bars (hidden when stopped) -->
+    <div class="app-metrics" id="metrics-{{ app.app_slug }}" style="{% if app.status != 'running' %}display:none{% endif %}">
+      <div class="metric-bar">
+        <div class="metric-label">
+          <span>CPU</span>
+          <span id="cpu-val-{{ app.app_slug }}">—</span>
+        </div>
+        <div class="metric-track">
+          <div class="metric-fill cpu" id="cpu-bar-{{ app.app_slug }}" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="metric-bar">
+        <div class="metric-label">
+          <span>MEM</span>
+          <span id="mem-val-{{ app.app_slug }}">—</span>
+        </div>
+        <div class="metric-track">
+          <div class="metric-fill mem" id="mem-bar-{{ app.app_slug }}" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="app-card-actions">
+    {% if app.status == 'running' %}
+      <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/{{ app.app_slug }}/stop">
+        <button type="submit" class="btn btn-ghost btn-sm" title="Stop">
+          <i class="mdi mdi-stop" style="color:#ff8c00;"></i> Stop
+        </button>
+      </form>
+      <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/{{ app.app_slug }}/restart">
+        <button type="submit" class="btn btn-ghost btn-sm" title="Restart">
+          <i class="mdi mdi-restart" style="color:var(--cyan);"></i> Restart
+        </button>
+      </form>
+      {% if app.ingress_mode in ('iframe', 'link') %}
+      <a href="/app/{{ workspace_id }}/{{ app.app_slug }}/" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" title="Ouvrir dans un nouvel onglet">
+        <i class="mdi mdi-open-in-new" style="color:var(--green);"></i> Ouvrir
+      </a>
+      {% endif %}
+    {% else %}
+      <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/{{ app.app_slug }}/start">
+        <button type="submit" class="btn btn-ghost btn-sm" title="Start">
+          <i class="mdi mdi-play" style="color:var(--green);"></i> Start
+        </button>
+      </form>
+    {% endif %}
+
+    <button class="btn btn-ghost btn-sm" onclick="toggleLogs('{{ app.app_slug }}')" id="logs-btn-{{ app.app_slug }}">
+      <i class="mdi mdi-console-line" style="color:var(--cyan);"></i> Logs
+    </button>
+
+    {% if app.env_schema %}
+    <button class="btn btn-ghost btn-sm" onclick="openEnvModal('{{ app.app_slug }}', '{{ app.app_name }}')">
+      <i class="mdi mdi-tune" style="color:var(--purple);"></i> Env
+    </button>
+    {% endif %}
+
+    {% if app.update_available %}
+    <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/{{ app.app_slug }}/update"
+          data-confirm="Mettre à jour {{ app.app_name }} vers v{{ app.catalog_version }} ? Le container sera recréé (données préservées), brève interruption.">
+      <button type="submit" class="btn btn-ghost btn-sm" title="Mettre à jour vers v{{ app.catalog_version }}">
+        <i class="mdi mdi-arrow-up-bold-circle" style="color:var(--green);"></i> Mettre à jour
+      </button>
+    </form>
+    {% endif %}
+
+    <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/{{ app.app_slug }}/uninstall"
+          data-confirm="Désinstaller {{ app.app_name }} ? Le container sera supprimé." style="margin-left:auto;">
+      <button type="submit" class="btn btn-ghost btn-sm" title="Désinstaller">
+        <i class="mdi mdi-trash-can-outline" style="color:#ff4466;"></i>
+      </button>
+    </form>
+  </div>
+
+  <!-- Log panel -->
+  <div class="app-log-panel" id="log-panel-{{ app.app_slug }}">
+    <div class="log-header">
+      <span><i class="mdi mdi-console-line" style="color:var(--cyan);margin-right:6px;"></i>logs — {{ app.container_name }}</span>
+      <div style="display:flex;gap:8px;">
+        <label style="cursor:pointer;font-size:0.68rem;">
+          <input type="checkbox" id="log-follow-{{ app.app_slug }}" onchange="restartLogs('{{ app.app_slug }}')" style="margin-right:4px;">follow
+        </label>
+        <button onclick="toggleLogs('{{ app.app_slug }}')" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:0.9rem;">✕</button>
+      </div>
+    </div>
+    <div class="log-body" id="log-body-{{ app.app_slug }}"></div>
+  </div>
+
+  <!-- Iframe panel (iframe ingress only) -->
+  {% if app.ingress_mode == 'iframe' %}
+  <div class="app-iframe-panel" id="iframe-panel-{{ app.app_slug }}">
+    <!-- Mobile-only topbar: lives inside the panel so iOS touch events work correctly -->
+    <div class="iframe-mobile-topbar">
+      <span style="flex:1;font-family:'Share Tech Mono',monospace;font-size:0.75rem;color:var(--cyan);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ app.app_name }}</span>
+      <button onclick="toggleIframe('{{ app.app_slug }}', '{{ workspace_id }}')" style="background:none;border:1px solid var(--border);color:var(--text-dim);font-size:0.9rem;padding:3px 8px;border-radius:4px;cursor:pointer;flex-shrink:0;">✕</button>
+    </div>
+    <div class="log-header">
+      <span><i class="mdi mdi-open-in-app" style="color:var(--green);margin-right:6px;"></i>{{ app.app_name }}</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button onclick="toggleIframeFull('{{ app.app_slug }}')" id="full-btn-{{ app.app_slug }}"
+                title="Mode plein écran"
+                style="background:none;border:none;cursor:pointer;color:var(--cyan);font-size:0.85rem;display:flex;align-items:center;gap:4px;">
+          <i class="mdi mdi-fullscreen" id="full-icon-{{ app.app_slug }}"></i>
+        </button>
+        <button onclick="toggleIframe('{{ app.app_slug }}', '{{ workspace_id }}')" style="background:none;border:none;cursor:pointer;color:var(--text-dim);">✕</button>
+      </div>
+    </div>
+    <iframe id="iframe-{{ app.app_slug }}" src="about:blank" loading="lazy" allowfullscreen></iframe>
+  </div>
+  {% endif %}
+
+</div><!-- end app-card -->
+{% endfor %}
+</div><!-- end apps-grid -->
+
+{% endif %}
+
+<!-- ── Env modals (one per app with env_schema) ── -->
+{% for app in apps %}
+{% if app.env_schema %}
+<div class="env-modal" id="env-modal-{{ app.app_slug }}">
+  <div class="env-backdrop" onclick="closeEnvModal('{{ app.app_slug }}')"></div>
+  <div class="env-box">
+    <div class="env-box-header">
+      <span><i class="mdi mdi-tune" style="margin-right:8px;"></i>Variables d'env — {{ app.app_name }}</span>
+      <button onclick="closeEnvModal('{{ app.app_slug }}')" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:1.1rem;">✕</button>
+    </div>
+    <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/{{ app.app_slug }}/env">
+      <div class="env-box-body">
+        {% for field in app.env_schema %}
+        <div class="mb-16">
+          <label class="form-label">
+            {{ field.key }}
+            {% if field.required %}<span style="color:#ff4466;">*</span>{% endif %}
+            {% if field.description %}<span style="font-weight:normal;color:var(--text-dim);"> — {{ field.description }}</span>{% endif %}
+          </label>
+          <input
+            type="{% if field.secret %}password{% else %}text{% endif %}"
+            name="env_{{ field.key }}"
+            class="form-input"
+            placeholder="{{ field.default or '' }}"
+            {% if field.required %}required{% endif %}
+          />
+        </div>
+        {% endfor %}
+        <p style="font-size:0.72rem;color:var(--text-dim);margin-top:8px;">
+          <i class="mdi mdi-lock-outline" style="color:var(--purple);"></i>
+          Les valeurs sont chiffrées (Fernet) et appliquées au prochain démarrage.
+        </p>
+      </div>
+      <div class="env-box-footer">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="closeEnvModal('{{ app.app_slug }}')">Annuler</button>
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="mdi mdi-check"></i> Sauvegarder
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% endblock %}
+
+{# Floating tray pour les progressions de tasks async (yt-dlp etc.) #}
+<div id="task-progress-tray"></div>
+
+{% block scripts %}
+<script>
+const WS_SLUG = {{ workspace_slug | tojson }};
+const WS_ID   = {{ workspace_id | tojson }};
+
+// ── Status SSE ────────────────────────────────────────────────────────────────
+const evtSrc = new EventSource(`/dashboard/w/${WS_SLUG}/apps/events`);
+evtSrc.onmessage = function(e) {
+  try {
+    const d = JSON.parse(e.data);
+    if (d.event === 'app_task_started') {
+      openTaskProgress(d.task_id, d.tool || d.app);
+    } else if (d.app && d.event) {
+      const slug = d.app;
+      const statusMap = {
+        app_started: 'running',
+        app_stopped: 'stopped',
+        app_crashed: 'crashed',
+        app_paused:  'paused',
+      };
+      const newStatus = statusMap[d.event] || d.event.replace('app_', '');
+      updateStatus(slug, newStatus);
+    }
+  } catch(err) {}
+};
+
+function updateStatus(slug, status) {
+  const dot  = document.getElementById('dot-' + slug);
+  const lbl  = document.getElementById('status-' + slug);
+  const met  = document.getElementById('metrics-' + slug);
+  if (!dot || !lbl) return;
+  dot.className  = 'status-dot ' + status;
+  lbl.textContent = status;
+  if (met) met.style.display = (status === 'running') ? 'flex' : 'none';
+  // Reload card actions by reloading page after a short delay
+  if (['running','stopped','crashed'].includes(status)) {
+    setTimeout(() => window.location.reload(), 1200);
+  }
+}
+
+// ── Task progress toasts ──────────────────────────────────────────────────────
+const _taskSources = {};
+
+function openTaskProgress(taskId, label) {
+  if (_taskSources[taskId]) return; // déjà ouvert
+
+  const tray = document.getElementById('task-progress-tray');
+  const toast = document.createElement('div');
+  toast.className = 'task-toast';
+  toast.id = 'toast-' + taskId;
+  toast.innerHTML = `
+    <div class="task-toast-header">
+      <span class="task-toast-title"><i class="mdi mdi-download-circle"></i> ${label}</span>
+      <button class="task-toast-close" onclick="closeTaskToast('${taskId}')">×</button>
+    </div>
+    <div class="task-toast-step" id="toast-step-${taskId}">starting…</div>
+    <div class="task-toast-bar-track">
+      <div class="task-toast-bar-fill" id="toast-bar-${taskId}" style="width:0%"></div>
+    </div>`;
+  tray.appendChild(toast);
+
+  const url = `/dashboard/w/${WS_SLUG}/task-progress/${taskId}`;
+  const src = new EventSource(url);
+  _taskSources[taskId] = src;
+
+  src.onmessage = function(ev) {
+    try {
+      const d = JSON.parse(ev.data);
+      const stepEl = document.getElementById('toast-step-' + taskId);
+      const barEl  = document.getElementById('toast-bar-'  + taskId);
+      const toastEl = document.getElementById('toast-' + taskId);
+      if (stepEl) {
+        let txt = d.step || '';
+        if (d.speed) txt += ' · ' + d.speed;
+        if (d.eta)   txt += ' · ETA ' + d.eta;
+        stepEl.textContent = txt;
+      }
+      if (barEl)  barEl.style.width = (d.percent || 0) + '%';
+      if (d.step === 'done') {
+        if (toastEl) toastEl.classList.add('done');
+        if (barEl)   barEl.style.background = 'var(--green)';
+        src.close();
+        delete _taskSources[taskId];
+        setTimeout(() => closeTaskToast(taskId), 5000);
+      } else if (d.step === 'error') {
+        if (stepEl) stepEl.textContent = 'error: ' + (d.error || '');
+        if (toastEl) toastEl.classList.add('error');
+        if (barEl)   barEl.style.background = '#ff4466';
+        src.close();
+        delete _taskSources[taskId];
+      }
+    } catch(_) {}
+  };
+  src.onerror = function() { src.close(); delete _taskSources[taskId]; };
+}
+
+function closeTaskToast(taskId) {
+  if (_taskSources[taskId]) { _taskSources[taskId].close(); delete _taskSources[taskId]; }
+  const el = document.getElementById('toast-' + taskId);
+  if (el) el.remove();
+}
+
+// ── Metrics SSE ───────────────────────────────────────────────────────────────
+const metSrc = new EventSource(`/dashboard/w/${WS_SLUG}/apps/metrics`);
+metSrc.onmessage = function(e) {
+  try {
+    const d = JSON.parse(e.data);
+    const slug = d.app_slug;
+    if (!slug) return;
+
+    const cpuVal = document.getElementById('cpu-val-' + slug);
+    const cpuBar = document.getElementById('cpu-bar-' + slug);
+    const memVal = document.getElementById('mem-val-' + slug);
+    const memBar = document.getElementById('mem-bar-' + slug);
+
+    if (cpuVal) cpuVal.textContent = d.cpu_percent.toFixed(1) + '%';
+    if (cpuBar) cpuBar.style.width = Math.min(d.cpu_percent, 100) + '%';
+    if (memVal && d.memory_limit_mb > 0) {
+      memVal.textContent = d.memory_mb.toFixed(0) + '/' + d.memory_limit_mb.toFixed(0) + 'MB';
+      if (memBar) memBar.style.width = Math.min(d.memory_mb / d.memory_limit_mb * 100, 100) + '%';
+    }
+  } catch(err) {}
+};
+
+// ── Logs ──────────────────────────────────────────────────────────────────────
+const _logSources = {};
+
+function toggleLogs(slug) {
+  const panel = document.getElementById('log-panel-' + slug);
+  const btn   = document.getElementById('logs-btn-' + slug);
+  if (!panel) return;
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    stopLogs(slug);
+  } else {
+    panel.classList.add('open');
+    startLogs(slug);
+  }
+}
+
+function restartLogs(slug) {
+  stopLogs(slug);
+  startLogs(slug);
+}
+
+function startLogs(slug) {
+  const body    = document.getElementById('log-body-' + slug);
+  const follow  = document.getElementById('log-follow-' + slug);
+  if (!body) return;
+  body.innerHTML = '';
+
+  const f = follow && follow.checked;
+  const url = `/dashboard/w/${WS_SLUG}/apps/${slug}/logs?lines=200&follow=${f}`;
+  const src = new EventSource(url);
+  _logSources[slug] = src;
+
+  src.onmessage = function(e) {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.error) { appendLog(body, '[error] ' + d.error); return; }
+      appendLog(body, d.log || e.data);
+    } catch(_) {
+      appendLog(body, e.data);
+    }
+  };
+  src.onerror = function() { src.close(); };
+}
+
+function stopLogs(slug) {
+  if (_logSources[slug]) {
+    _logSources[slug].close();
+    delete _logSources[slug];
+  }
+}
+
+function appendLog(body, text) {
+  const p = document.createElement('p');
+  p.textContent = text;
+  body.appendChild(p);
+  body.scrollTop = body.scrollHeight;
+}
+
+// ── Iframe ────────────────────────────────────────────────────────────────────
+const _mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+
+function toggleIframe(slug, wsId) {
+  const panel  = document.getElementById('iframe-panel-' + slug);
+  const iframe = document.getElementById('iframe-' + slug);
+  if (!panel) return;
+  if (panel.classList.contains('open')) {
+    panel.classList.remove('open', 'fullscreen');
+    _setFullIcon(slug, false);
+    iframe.src = 'about:blank';
+    if (_mobileMenuBtn) _mobileMenuBtn.style.display = '';
+  } else {
+    panel.classList.add('open');
+    iframe.src = `/app/${wsId}/${slug}/`;
+    if (window.innerWidth <= 768) {
+      panel.classList.add('fullscreen');
+      _setFullIcon(slug, true);
+      if (_mobileMenuBtn) _mobileMenuBtn.style.display = 'none';
+    }
+  }
+}
+
+function toggleIframeFull(slug) {
+  const panel = document.getElementById('iframe-panel-' + slug);
+  if (!panel) return;
+  const isFullscreen = panel.classList.toggle('fullscreen');
+  _setFullIcon(slug, isFullscreen);
+}
+
+function _setFullIcon(slug, isFullscreen) {
+  const icon = document.getElementById('full-icon-' + slug);
+  if (!icon) return;
+  icon.className = isFullscreen ? 'mdi mdi-fullscreen-exit' : 'mdi mdi-fullscreen';
+}
+
+// Escape key exits fullscreen
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.app-iframe-panel.fullscreen').forEach(p => {
+      p.classList.remove('fullscreen');
+      const slug = p.id.replace('iframe-panel-', '');
+      _setFullIcon(slug, false);
+    });
+  }
+});
+
+// Auto-open app in fullscreen from sidebar link (?open=slug)
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const openSlug = params.get('open');
+  if (!openSlug) return;
+  const panel  = document.getElementById('iframe-panel-' + openSlug);
+  const iframe = document.getElementById('iframe-' + openSlug);
+  if (!panel || !iframe) return;
+  iframe.src = `/app/${WS_ID}/${openSlug}/`;
+  panel.classList.add('open', 'fullscreen');
+  _setFullIcon(openSlug, true);
+  if (window.innerWidth <= 768 && _mobileMenuBtn) _mobileMenuBtn.style.display = 'none';
+})();
+
+// ── Env modals ────────────────────────────────────────────────────────────────
+function openEnvModal(slug, name) {
+  const modal = document.getElementById('env-modal-' + slug);
+  if (modal) modal.classList.add('open');
+}
+function closeEnvModal(slug) {
+  const modal = document.getElementById('env-modal-' + slug);
+  if (modal) modal.classList.remove('open');
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.env-modal.open').forEach(m => m.classList.remove('open'));
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}API Server{% endblock %}
+{% block page_title %}API Server{% endblock %}
+{% block page_subtitle %}// api openai-compatible — {{ workspace.name }}{% endblock %}
+{% block breadcrumb_tail %}
+  <span class="breadcrumb-sep">/</span>
+  <span class="breadcrumb-item">api-server</span>
+{% endblock %}
+
+{% set active_page = 'api_server' %}
+
+{% block head %}
+<style>
+.kv-label { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+.kv-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.kv-box {
+  flex: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(0,245,255,0.2);
+  border-radius: 6px; padding: 10px 14px;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.8rem;
+  color: var(--cyan); word-break: break-all; line-height: 1.5;
+}
+.copy-ok { display: none; font-size: 0.7rem; color: var(--green); margin-left: -4px; }
+.cmd-block {
+  background: rgba(0,0,0,0.4); border: 1px solid rgba(0,245,255,0.2);
+  border-radius: 6px; padding: 14px 16px; margin: 10px 0 0;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.76rem;
+  color: var(--text); white-space: pre-wrap; word-break: break-all; line-height: 1.6;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── CONNEXION EXTERNE (clé API) ─────────────────────────────────────────── -->
+<div class="card mb-24">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="card-title"><i class="mdi mdi-earth" style="color:var(--cyan);"></i> Connexion externe</div>
+    <button onclick="document.getElementById('apikey-form').style.display = document.getElementById('apikey-form').style.display === 'none' ? 'block' : 'none'"
+            class="btn btn-primary btn-sm">+ Générer une clé</button>
+  </div>
+
+  {% if new_key %}
+  <div style="padding: 16px; background: rgba(0,200,100,0.08); border-bottom: 1px solid rgba(0,200,100,0.2);">
+    <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px;">
+      Nouvelle clé générée — copiez-la maintenant, elle ne sera plus affichée :
+    </div>
+    <div class="kv-row" style="margin-bottom: 0;">
+      <div class="kv-box" id="kv-new-key" style="border-color: rgba(0,200,100,0.4); color: var(--green);">{{ new_key }}</div>
+      <button class="btn btn-ghost btn-sm" onclick="copyEl('kv-new-key','ok-new-key')"><i class="mdi mdi-content-copy"></i></button>
+      <span class="copy-ok" id="ok-new-key"><i class="mdi mdi-check"></i> Copié</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <div id="apikey-form" style="display: none; padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+    <form method="post" action="/dashboard/workspaces/{{ workspace.slug }}/api-keys/create" class="flex" style="gap: 8px; align-items: flex-end;">
+      <input type="hidden" name="next" value="api-server" />
+      <div style="flex: 1;">
+        <label class="form-label">Nom</label>
+        <input type="text" name="name" required class="form-input" placeholder="ex: OpenWebUI maison" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Générer</button>
+    </form>
+  </div>
+
+  <div class="card-body">
+    <p class="dim" style="font-size:0.82rem; line-height:1.6; margin-bottom:18px;">
+      Connectez une app tierce compatible OpenAI (SDK officiel, LangChain, OpenWebUI, Continue.dev, Fabric, …)
+      depuis l'extérieur de la plateforme. L'accès externe exige une <strong>clé API du workspace</strong>
+      (<code>hf_…</code>) comme token — générée ici, révocable à tout moment.
+    </p>
+
+    <div class="kv-label">Base URL</div>
+    <div class="kv-row">
+      <div class="kv-box" id="kv-base-url">{{ base_url }}</div>
+      <button class="btn btn-ghost btn-sm" onclick="copyEl('kv-base-url','ok-base-url')"><i class="mdi mdi-content-copy"></i></button>
+      <span class="copy-ok" id="ok-base-url"><i class="mdi mdi-check"></i> Copié</span>
+    </div>
+
+    <div class="kv-label">Token (API Key)</div>
+    <p class="dim" style="font-size:0.78rem; line-height:1.6; margin-bottom:10px;">
+      Utilisez une clé API active ci-dessous (la valeur complète <code>hf_…</code> n'est affichée qu'à la création).
+    </p>
+
+    {% if api_keys %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Préfixe</th>
+          <th>Dernière utilisation</th>
+          <th>Créée le</th>
+          <th style="text-align:right;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in api_keys %}
+        <tr>
+          <td class="mono">{{ k.name }}</td>
+          <td><code>{{ k.key_prefix }}...</code></td>
+          <td class="dim">{{ k.last_used_at.strftime('%Y-%m-%d %H:%M') if k.last_used_at else '—' }}</td>
+          <td class="dim">{{ k.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td style="text-align:right;">
+            <form method="post" action="/dashboard/workspaces/{{ workspace.slug }}/api-keys/{{ k.id }}/revoke"
+                  style="display: inline;" data-confirm="Révoquer cette clé API ?">
+              <input type="hidden" name="next" value="api-server" />
+              <button type="submit" class="btn btn-danger btn-sm">Révoquer</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="form-hint">
+      <i class="mdi mdi-alert-outline" style="color:var(--cyan);"></i>
+      Aucune clé API active — générez-en une pour permettre l'accès externe.
+    </div>
+    {% endif %}
+
+    <div class="form-hint" style="margin-top:12px;">
+      <i class="mdi mdi-shield-key-outline" style="color:var(--cyan);"></i>
+      Une clé donne accès à tous les agents de ce workspace. Ne la partagez pas publiquement ;
+      révoquez-la immédiatement en cas de doute.
+    </div>
+  </div>
+</div>
+
+<!-- ── CONNEXION INTERNE (apps du workspace) ───────────────────────────────── -->
+<div class="card mb-24">
+  <div class="card-header">
+    <div class="card-title"><i class="mdi mdi-lan" style="color:var(--cyan);"></i> Connexion interne (apps du workspace)</div>
+  </div>
+  <div class="card-body">
+    <p class="dim" style="font-size:0.82rem; line-height:1.6; margin-bottom:18px;">
+      Les apps installées via le Beekeeper (ex&nbsp;: Fabric) joignent l'API directement sur le réseau
+      Docker interne. Sur ce réseau — et uniquement là — l'ID du workspace sert de token&nbsp;:
+      le manifest de l'app l'injecte automatiquement (<code>LLM_BASE_URL</code> / <code>LLM_API_KEY</code>).
+      Ce token est <strong>refusé depuis l'extérieur</strong>.
+    </p>
+
+    <div class="kv-label">Base URL (réseau interne)</div>
+    <div class="kv-row">
+      <div class="kv-box" id="kv-int-url">{{ internal_base_url }}</div>
+      <button class="btn btn-ghost btn-sm" onclick="copyEl('kv-int-url','ok-int-url')"><i class="mdi mdi-content-copy"></i></button>
+      <span class="copy-ok" id="ok-int-url"><i class="mdi mdi-check"></i> Copié</span>
+    </div>
+
+    <div class="kv-label">Token (réseau interne)</div>
+    <div class="kv-row" style="margin-bottom:0;">
+      <div class="kv-box" id="kv-int-token">{{ internal_token }}</div>
+      <button class="btn btn-ghost btn-sm" onclick="copyEl('kv-int-token','ok-int-token')"><i class="mdi mdi-content-copy"></i></button>
+      <span class="copy-ok" id="ok-int-token"><i class="mdi mdi-check"></i> Copié</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODÈLES ─────────────────────────────────────────────────────────────── -->
+<div class="card mb-24">
+  <div class="card-header">
+    <div class="card-title">Modèles disponibles</div>
+    <span class="mono dim" style="font-size:0.75rem;">{{ agents | length }} agent(s)</span>
+  </div>
+  <div class="card-body" style="padding:0;">
+    {% if agents %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Model (champ "model" de la requête)</th>
+          <th>Nom</th>
+          <th>Provider</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for agent in agents %}
+        <tr>
+          <td><code style="font-size:0.78rem;">{{ agent.id }}</code></td>
+          <td class="mono">
+            {{ agent.name }}
+            {% if agent.is_default %}
+            <span class="badge" style="font-size:0.62rem; border-color: rgba(191,0,255,0.4); color: var(--purple); margin-left:4px;">défaut</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {% if (agent.llm_provider or 'openrouter') == 'openrouter' %}badge-active{% else %}badge-inactive{% endif %}" style="font-size:0.65rem;">
+              <span class="badge-dot"></span>{{ agent.llm_provider or 'openrouter' }}
+            </span>
+          </td>
+          <td style="text-align:right; font-size:0.7rem;">
+            {% if (agent.llm_provider or 'openrouter') != 'openrouter' %}
+              <span class="dim"><i class="mdi mdi-alert-outline"></i> non supporté par l'API</span>
+            {% else %}
+              <span style="color:var(--green);"><i class="mdi mdi-check"></i> compatible</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty-state" style="padding:32px; text-align:center;">
+        <p class="dim">Aucun agent dans ce workspace.</p>
+        <p class="dim" style="font-size:0.8rem;">
+          <a href="/dashboard/w/{{ workspace_slug }}/agents/new" style="color:var(--cyan);">Créez un agent</a> pour pouvoir l'utiliser via l'API.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── EXEMPLES ────────────────────────────────────────────────────────────── -->
+{% set example_token = new_key if new_key else 'hf_VOTRE_CLE' %}
+<div class="card mb-24">
+  <div class="card-header"><div class="card-title">Exemple — curl</div></div>
+  <div class="card-body">
+    <pre class="cmd-block" id="cmd-curl">curl {{ base_url }}/chat/completions \
+  -H "Authorization: Bearer {{ example_token }}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "{{ example_model }}",
+    "messages": [{"role": "user", "content": "Bonjour !"}]
+  }'</pre>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="copyEl('cmd-curl','ok-curl')"><i class="mdi mdi-content-copy"></i> Copier</button>
+    <span class="copy-ok" id="ok-curl"><i class="mdi mdi-check"></i> Copié</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><div class="card-title">Configuration type (SDK OpenAI)</div></div>
+  <div class="card-body">
+    <p class="dim" style="font-size:0.82rem; margin-bottom:4px;">La plupart des apps/SDK compatibles OpenAI se configurent avec deux variables :</p>
+    <pre class="cmd-block" id="cmd-env">OPENAI_API_KEY={{ example_token }}
+OPENAI_BASE_URL={{ base_url }}</pre>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="copyEl('cmd-env','ok-env')"><i class="mdi mdi-content-copy"></i> Copier</button>
+    <span class="copy-ok" id="ok-env"><i class="mdi mdi-check"></i> Copié</span>
+
+    <p class="dim" style="font-size:0.78rem; margin-top:16px; line-height:1.6;">
+      Dans le champ <strong>model</strong> de la requête, indiquez l'ID d'un agent listé ci-dessus.
+      Si le modèle demandé ne correspond à aucun agent, HiveFlows bascule automatiquement sur l'agent
+      par défaut du workspace. Le streaming (<code>stream: true</code>) est supporté.
+      Seuls les agents configurés avec le provider <strong>OpenRouter</strong> sont actuellement joignables via cette API.
+      Documentation complète : <code>docs/api_server.md</code>.
+    </p>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyEl(boxId, okId) {
+  const text = document.getElementById(boxId).textContent.trim();
+  navigator.clipboard.writeText(text).then(function() {
+    const ok = document.getElementById(okId);
+    ok.style.display = 'inline';
+    setTimeout(() => { ok.style.display = 'none'; }, 1500);
+  });
+}
+</script>
+{% endblock %}

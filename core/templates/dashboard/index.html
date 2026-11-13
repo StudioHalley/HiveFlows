@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Accueil{% endblock %}
+{% block page_title %}Accueil{% endblock %}
+{% block breadcrumb_tail %}{% endblock %}
+
+{% set active_page = 'dashboard' %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/w/{{ workspace_slug }}/chat" class="btn btn-primary">◈ Nouveau chat</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- STATS -->
+<div class="stats-grid">
+  <div class="card">
+    <div class="card-title">Agents actifs</div>
+    <div class="card-value">{{ agents | length }}</div>
+    <div class="card-label">configurés dans la DB</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Tasks exécutées</div>
+    <div class="card-value">{{ task_count }}</div>
+    <div class="card-label">total enregistrées</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Tasks en cours</div>
+    <div class="card-value">{{ running_count }}</div>
+    <div class="card-label">pending + running</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Statut système</div>
+    <div class="card-value" style="font-size:1.4rem; color: var(--green); text-shadow: 0 0 16px rgba(0,255,136,0.4);">ONLINE</div>
+    <div class="card-label">core + workers</div>
+  </div>
+</div>
+
+<div class="grid-2">
+
+  <!-- AGENTS -->
+  <div class="card">
+    <div class="flex-between mb-16">
+      <div class="card-title">Agents configurés</div>
+      <a href="/dashboard/w/{{ workspace_slug }}/agents" class="btn btn-ghost btn-sm">Voir tout →</a>
+    </div>
+
+    {% if agents %}
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        {% for agent in agents %}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(0,245,255,0.05);">
+          <div>
+            <div class="mono" style="font-size: 0.85rem; color: #e8f4ff;">{{ agent.name }}</div>
+            <div class="mono dim" style="font-size: 0.65rem; margin-top: 2px;">{{ agent.id }}</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="badge badge-active"><span class="badge-dot"></span>actif</span>
+            <a href="/dashboard/w/{{ workspace_slug }}/chat?agent_id={{ agent.id }}" class="btn btn-ghost btn-sm">Chat</a>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">◇</div>
+        <div class="empty-state-title">Aucun agent configuré</div>
+        <div class="empty-state-sub">Créez votre premier agent pour commencer.</div>
+        <a href="/dashboard/w/{{ workspace_slug }}/agents/new" class="btn btn-primary">+ Créer un agent</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- TASKS RÉCENTES -->
+  <div class="card">
+    <div class="flex-between mb-16">
+      <div class="card-title">Tasks récentes</div>
+      <a href="/dashboard/w/{{ workspace_slug }}/tasks" class="btn btn-ghost btn-sm">Voir tout →</a>
+    </div>
+
+    {% if recent_tasks %}
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        {% for task in recent_tasks %}
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(0,245,255,0.05);">
+          <div>
+            <div class="mono" style="font-size: 0.78rem; color: var(--cyan);">{{ task.type | upper }}</div>
+            <div class="mono dim" style="font-size: 0.62rem; margin-top: 2px;">{{ task.id | string | truncate(16, True, '') }}…</div>
+          </div>
+          <span class="badge badge-{{ task.status }}">
+            <span class="badge-dot"></span>{{ task.status }}
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">▷</div>
+        <div class="empty-state-title">Aucune task</div>
+        <div class="empty-state-sub">Les tasks exécutées par les agents apparaîtront ici.</div>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- TERMINAL DEMO -->
+<div class="mt-24">
+  <div class="section-eyebrow">// system_log</div>
+  <div class="terminal">
+    <div class="terminal-bar">
+      <div class="t-dot red"></div>
+      <div class="t-dot yellow"></div>
+      <div class="t-dot green"></div>
+      <span class="terminal-title">hiveflows — core v0.3.0</span>
+    </div>
+    <div class="terminal-body" style="font-family: 'Share Tech Mono', monospace; font-size: 0.82rem; line-height: 2; padding: 20px 24px; color: var(--text-dim);">
+      <div><span style="color: var(--green);">✓</span> <span style="color: var(--cyan);">core</span> FastAPI démarré sur :8002</div>
+      <div><span style="color: var(--green);">✓</span> <span style="color: var(--cyan);">database</span> PostgreSQL connecté</div>
+      <div><span style="color: var(--green);">✓</span> <span style="color: var(--cyan);">workers</span> Celery en écoute sur Redis</div>
+      <div><span style="color: var(--green);">✓</span> <span style="color: var(--cyan);">agents</span> {{ agents | length }} agent(s) chargé(s) depuis la DB</div>
+      <div><span style="color: var(--purple);">→</span> Prêt à recevoir des requêtes. <span class="typing-cursor"></span></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

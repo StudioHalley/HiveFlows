@@ -1,0 +1,22 @@
+name: SilverBullet
+slug: silverbullet
+version: "1.1"
+description: "Éditeur de notes Markdown avec base de connaissances"
+image: ghcr.io/silverbulletmd/silverbullet:latest
+type: persistent
+ingress: iframe
+port: 3000
+
+mounts:
+  - host: ".hive/space"
+    container: "/space"
+    description: "Espace SilverBullet (notes, pages, attachements)"
+
+rewrite_paths: true
+
+resources:
+  memory: 256m
+  cpus: "0.5"
+  user: "1000:1000"
+
+icon: mdi-notebook-outline

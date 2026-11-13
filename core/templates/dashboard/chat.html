@@ -1,0 +1,1031 @@
+{% extends "base.html" %}
+
+{% block title %}Chat{% endblock %}
+{% block page_title %}Chat{% endblock %}
+{% block breadcrumb_tail %}<span class="breadcrumb-sep">/</span><span class="breadcrumb-item">chat</span>{% endblock %}
+
+{% set active_page = 'chat' %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/atom-one-dark.min.css"/>
+<script src="{{ static_v('marked.min.js') }}"></script>
+<script src="{{ static_v('highlight.min.js') }}"></script>
+{% endblock %}
+
+{% block content_class %}{% endblock %}
+
+{% block content %}
+<div class="chat-layout-with-sidebar">
+
+  <!-- AGENTS SIDEBAR -->
+  <aside class="chat-sidebar" id="chat-sidebar">
+    <div class="chat-sidebar-header">
+      <span class="mono dim" style="font-size: 0.65rem; letter-spacing: 0.12em;">// AGENTS</span>
+      <button class="btn btn-ghost btn-sm" onclick="toggleChatSidebar()" style="padding: 3px 8px; font-size: 0.6rem;">&#10005;</button>
+    </div>
+    <div class="chat-sidebar-list">
+      <div id="sidebar-no-agent" class="chat-sidebar-item{% if not selected_agent_id %} chat-sidebar-active{% endif %}"
+           onclick="selectAgent(null)" style="cursor:pointer;">
+        <div class="chat-sidebar-agent" style="color: rgba(255,255,255,0.4);">// humains</div>
+        <div class="chat-sidebar-preview" style="color: rgba(255,255,255,0.25);">sans agent</div>
+      </div>
+      {% for agent in agents %}
+      <div class="chat-sidebar-item{% if agent.id == selected_agent_id %} chat-sidebar-active{% endif %}"
+           onclick="selectAgent('{{ agent.id }}')" style="cursor:pointer;">
+        <div class="chat-sidebar-agent">@{{ agent.id }}</div>
+        <div class="chat-sidebar-preview">{{ agent.name }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- TÂCHES ACTIVES -->
+    <div id="sidebar-tasks-section" style="display:none; border-top: 1px solid rgba(0,245,255,0.1); margin-top: 4px;">
+      <div class="chat-sidebar-header" style="padding: 8px 12px 4px;">
+        <span class="mono dim" style="font-size: 0.62rem; letter-spacing: 0.12em;">// TÂCHES</span>
+      </div>
+      <div id="sidebar-tasks-list" style="padding: 0 10px 8px;"></div>
+    </div>
+
+    <!-- MEMBRES -->
+    {% if members %}
+    <div style="border-top: 1px solid rgba(0,245,255,0.1); margin-top: 4px;">
+      <div class="chat-sidebar-header" style="padding: 8px 12px 4px;">
+        <span class="mono dim" style="font-size: 0.62rem; letter-spacing: 0.12em;">// MEMBRES</span>
+      </div>
+      <div class="chat-sidebar-list" style="padding-bottom: 8px;">
+        {% set roles_order = ['owner', 'admin', 'member', 'viewer'] %}
+        {% for role_name in roles_order %}
+          {% set role_members = members | selectattr('role', 'equalto', role_name) | list %}
+          {% if role_members %}
+          <div class="mono dim" style="padding: 6px 12px 2px; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(0,245,255,0.3);">{{ role_name }}</div>
+          {% for m in role_members %}
+          <div class="chat-sidebar-item{% if m.slug == (user.slug or user.email.split('@')[0]) %} chat-sidebar-active{% endif %}" style="cursor: default;">
+            <div class="chat-sidebar-agent">@{{ m.slug }}</div>
+            <div class="chat-sidebar-preview">{{ m.display_name }}</div>
+          </div>
+          {% endfor %}
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </aside>
+
+  <!-- MAIN CHAT AREA -->
+  <div class="chat-main">
+    <div class="chat-layout">
+
+  <!-- TOAST NOTIFICATIONS (task_done success/error only) -->
+  <div id="toast-container" style="
+    position: fixed; top: 24px; right: 24px; z-index: 9999;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  "></div>
+
+  <!-- MESSAGES -->
+  <div class="chat-messages" id="messages">
+    <div id="load-more-sentinel" style="text-align:center; padding: 8px 0; display: none;">
+      <button class="btn btn-ghost btn-sm" onclick="loadOlderMessages()" id="load-more-btn">Charger plus ancien...</button>
+    </div>
+    <div id="welcome-message" style="text-align: center; padding: 40px 0;">
+      <div style="font-family: 'Orbitron', sans-serif; font-size: 0.9rem; color: rgba(0,245,255,0.3); letter-spacing: 0.1em;">HIVE<span style="color: rgba(191,0,255,0.3);">FLOWS</span></div>
+      <div class="mono dim mt-8" style="font-size: 0.72rem; letter-spacing: 0.15em;">// chargement...</div>
+    </div>
+  </div>
+
+  <!-- HITL INTERRUPT BOX -->
+  <div class="hitl-box" id="hitl-box" style="display: none;">
+    <div class="hitl-title">!! APPROBATION REQUISE</div>
+    <div class="mono" style="font-size: 0.82rem; color: var(--text); margin-bottom: 8px;">L'agent veut exécuter un script :</div>
+    <div class="json-preview" id="hitl-payload"></div>
+    <div class="hitl-actions">
+      <button class="btn btn-approve" onclick="sendResume('approve')">Approuver</button>
+      <button class="btn btn-danger"  onclick="sendResume('reject')">Rejeter</button>
+    </div>
+  </div>
+
+  <!-- INPUT BAR -->
+  <div class="chat-input-bar">
+    <div class="agent-selector">
+      <button class="btn btn-ghost btn-sm" onclick="toggleChatSidebar()" style="padding: 4px 10px; font-size: 0.65rem;">&#9636;</button>
+      <span id="agent-indicator" class="mono" style="font-size: 0.72rem; color: var(--text-dim);">// @agent pour mentionner</span>
+      <span class="badge badge-active" id="agent-status"><span class="badge-dot"></span>pret</span>
+    </div>
+
+    {% if can_chat %}
+    <div class="chat-input-row" style="position: relative;">
+      <div id="mention-dropdown" class="mention-dropdown" style="display:none;"></div>
+      <textarea
+        class="chat-input"
+        id="chat-input"
+        placeholder="// envoie un message... (@agent pour mentionner)"
+        rows="1"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this); checkMention(this)"
+      ></textarea>
+      <button class="btn btn-primary" id="send-btn" onclick="sendMessage()">
+        Envoyer
+      </button>
+    </div>
+    {% else %}
+    <div class="mono dim" style="padding: 16px; text-align: center; font-size: 0.75rem;">
+      Vous etes viewer — lecture seule
+    </div>
+    {% endif %}
+  </div>
+</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* ── MARKED + HIGHLIGHT.JS SETUP ── */
+  marked.setOptions({
+    highlight: (code, lang) => {
+      if (lang && hljs.getLanguage(lang)) {
+        return hljs.highlight(code, { language: lang }).value;
+      }
+      return hljs.highlightAuto(code).value;
+    },
+    breaks: true,
+    gfm: true,
+    langPrefix: 'hljs language-',
+  });
+
+  /* ── CONSTANTS ── */
+  const WORKSPACE_ID   = "{{ workspace_id or '' }}";
+  const WORKSPACE_SLUG = "{{ workspace_slug or '' }}";
+  const CURRENT_USER_ID = "{{ current_user_id or '' }}";
+  const CURRENT_DISPLAY_NAME = "{{ current_display_name or '' }}";
+  const URL_AGENT_ID   = "{{ selected_agent_id or '' }}";
+  const AGENT_IDS  = new Set({{ agents | map(attribute='id') | list | tojson }});
+  const MEMBER_SLUGS = new Set({{ members | map(attribute='slug') | list | tojson }});
+
+  let currentAgentId   = URL_AGENT_ID || null;
+  let currentAgentBubble = null;
+  let isSending        = false;
+  let oldestMessageId  = null;
+
+  /* ── TASK NOTIFICATIONS ── */
+  const _taskProgress = {}; // task_id → {el, bar, label, total}
+
+  // Toast léger pour task_done (succès / erreur) — coin supérieur droit
+  function showToast(message, type = 'success', duration = 6000) {
+    const toast = document.createElement('div');
+    const color = type === 'error' ? 'var(--danger, #ff4444)' : 'var(--cyan, #00f5ff)';
+    toast.style.cssText = `
+      background: var(--surface, #0d1117); border: 1px solid ${color};
+      color: var(--text, #e0e0e0); padding: 10px 16px; border-radius: 4px;
+      font-family: monospace; font-size: 0.75rem; max-width: 300px;
+      box-shadow: 0 0 12px ${color}33; pointer-events: auto;
+      opacity: 0; transition: opacity 0.2s; white-space: pre-wrap;
+    `;
+    toast.textContent = message;
+    document.getElementById('toast-container').appendChild(toast);
+    requestAnimationFrame(() => { toast.style.opacity = '1'; });
+    if (duration > 0) {
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+    return toast;
+  }
+
+  // Barre de progression dans le sidebar — une entrée par task_id
+  function _ensureSidebarTasksVisible() {
+    const section = document.getElementById('sidebar-tasks-section');
+    if (section) section.style.display = 'block';
+    // Ouvrir le sidebar si fermé
+    const sidebar = document.getElementById('chat-sidebar');
+    if (sidebar && sidebar.style.display === 'none') sidebar.style.display = '';
+  }
+
+  function _hideSidebarTasksIfEmpty() {
+    const list = document.getElementById('sidebar-tasks-list');
+    if (list && list.children.length === 0) {
+      const section = document.getElementById('sidebar-tasks-section');
+      if (section) section.style.display = 'none';
+    }
+  }
+
+  function showProgressToast(taskId, tool, total, targetLang) {
+    if (_taskProgress[taskId]) return _taskProgress[taskId];
+
+    _ensureSidebarTasksVisible();
+
+    const item = document.createElement('div');
+    item.id = `task-progress-${taskId}`;
+    item.style.cssText = 'padding: 6px 2px 8px; border-bottom: 1px solid rgba(255,255,255,0.05);';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
+
+    const nameEl = document.createElement('span');
+    nameEl.style.cssText = 'font-family:monospace; font-size:0.62rem; color:var(--cyan,#00f5ff); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px;';
+    nameEl.textContent = tool.replace('translate_', '');
+
+    const countEl = document.createElement('span');
+    countEl.style.cssText = 'font-family:monospace; font-size:0.6rem; color:rgba(255,255,255,0.35);';
+    countEl.textContent = `0/${total}`;
+
+    header.appendChild(nameEl);
+    header.appendChild(countEl);
+
+    const barOuter = document.createElement('div');
+    barOuter.style.cssText = 'background:rgba(255,255,255,0.07); border-radius:2px; height:3px;';
+    const barInner = document.createElement('div');
+    barInner.style.cssText = 'background:var(--cyan,#00f5ff); height:3px; border-radius:2px; width:0%; transition:width 0.4s;';
+    barOuter.appendChild(barInner);
+
+    const langEl = document.createElement('div');
+    langEl.style.cssText = 'font-family:monospace; font-size:0.58rem; color:rgba(255,255,255,0.25); margin-top:3px;';
+    langEl.textContent = targetLang || '';
+
+    item.appendChild(header);
+    item.appendChild(barOuter);
+    item.appendChild(langEl);
+    document.getElementById('sidebar-tasks-list').appendChild(item);
+
+    _taskProgress[taskId] = { el: item, bar: barInner, count: countEl, total };
+    return _taskProgress[taskId];
+  }
+
+  function updateProgressToast(taskId, current, total) {
+    const t = _taskProgress[taskId];
+    if (!t) return;
+    const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+    t.bar.style.width = pct + '%';
+    t.count.textContent = `${current}/${total}`;
+  }
+
+  function removeProgressToast(taskId) {
+    const t = _taskProgress[taskId];
+    if (!t) return;
+    t.el.style.opacity = '0';
+    t.el.style.transition = 'opacity 0.3s';
+    setTimeout(() => {
+      t.el.remove();
+      delete _taskProgress[taskId];
+      _hideSidebarTasksIfEmpty();
+    }, 400);
+  }
+  let hasMore          = false;
+  let evtSource        = null;
+
+  /* ── AUTO-RESIZE TEXTAREA ── */
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  /* ── AGENT SELECTOR ── */
+  function selectAgent(agentId) {
+    // Toggle: clicking the already-selected agent deselects it (human-only mode)
+    if (agentId && agentId === currentAgentId) agentId = null;
+    currentAgentId = agentId;
+    document.querySelectorAll('.chat-sidebar-item').forEach(el => el.classList.remove('chat-sidebar-active'));
+    if (agentId) {
+      event.currentTarget.classList.add('chat-sidebar-active');
+      document.getElementById('agent-indicator').innerHTML =
+        `// agent: <span style="color:var(--cyan)">@${escHtml(agentId)}</span>`;
+    } else {
+      document.getElementById('sidebar-no-agent').classList.add('chat-sidebar-active');
+      document.getElementById('agent-indicator').innerHTML =
+        `<span style="color:rgba(255,255,255,0.35)">// humains seulement</span>`;
+    }
+    // On mobile: close the sidebar after selection
+    if (window.innerWidth <= 768) toggleChatSidebar();
+  }
+
+  // Init indicator to match initial state
+  (function() {
+    if (!currentAgentId) {
+      document.getElementById('agent-indicator').innerHTML =
+        `<span style="color:rgba(255,255,255,0.35)">// humains seulement</span>`;
+    } else {
+      document.getElementById('agent-indicator').innerHTML =
+        `// agent: <span style="color:var(--cyan)">@${escHtml(currentAgentId)}</span>`;
+    }
+  })();
+
+  /* ── SEND MESSAGE (POST, returns immediately) ── */
+  async function sendMessage() {
+    if (isSending) return;
+    const input   = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message) return;
+
+    input.value = '';
+    autoResize(input);
+    isSending = true;
+    document.getElementById('send-btn').disabled = true;
+
+    try {
+      const resp = await fetch('/dashboard/chat/send', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          agent_id: currentAgentId,
+          message,
+          workspace_id: WORKSPACE_ID || null,
+          workspace_slug: WORKSPACE_SLUG || null,
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: `HTTP ${resp.status}` }));
+        appendSystemMessage(err.detail || `Erreur ${resp.status}`);
+      }
+    } catch (err) {
+      appendSystemMessage(`Erreur: ${err.message}`);
+    } finally {
+      isSending = false;
+      document.getElementById('send-btn').disabled = false;
+    }
+  }
+
+  /* ── HITL RESUME ── */
+  async function sendResume(decision) {
+    // TODO: adapt for shared model once HITL is reworked
+    document.getElementById('hitl-box').style.display = 'none';
+  }
+
+  /* ── EVENT SOURCE (real-time) ── */
+  function connectSSE() {
+    if (evtSource) evtSource.close();
+    evtSource = new EventSource(`/dashboard/w/${WORKSPACE_SLUG}/chat/events`);
+
+    evtSource.addEventListener('user_message', (e) => {
+      const d = JSON.parse(e.data);
+      const isMe = d.user_id === CURRENT_USER_ID;
+      appendUserMsg(d.content, d.display_name || 'Anonyme', isMe, d.agent_id);
+    });
+
+    evtSource.addEventListener('agent_start', (e) => {
+      const d = JSON.parse(e.data);
+      currentAgentBubble = createAgentBubble(d.agent_id);
+      setStatus('streaming');
+    });
+
+    evtSource.addEventListener('agent_token', (e) => {
+      const d = JSON.parse(e.data);
+      if (currentAgentBubble) appendToken(currentAgentBubble, d.content || '');
+    });
+
+    evtSource.addEventListener('agent_tool_call', (e) => {
+      const d = JSON.parse(e.data);
+      if (currentAgentBubble) appendToolCall(currentAgentBubble, d.name, d.args);
+    });
+
+    evtSource.addEventListener('agent_tool_result', (e) => {
+      const d = JSON.parse(e.data);
+      if (currentAgentBubble) appendToolResult(currentAgentBubble, d.name, d.output);
+    });
+
+    evtSource.addEventListener('agent_end', (e) => {
+      if (currentAgentBubble) removeTypingCursor(currentAgentBubble);
+      currentAgentBubble = null;
+      setStatus('pret');
+    });
+
+    evtSource.addEventListener('agent_error', (e) => {
+      const d = JSON.parse(e.data);
+      if (currentAgentBubble) {
+        showError(currentAgentBubble, d.message || 'Erreur agent');
+        removeTypingCursor(currentAgentBubble);
+      } else {
+        appendSystemMessage(`Erreur agent: ${d.message}`);
+      }
+      currentAgentBubble = null;
+      setStatus('pret');
+    });
+
+    evtSource.addEventListener('interrupt', (e) => {
+      const d = JSON.parse(e.data);
+      if (currentAgentBubble) removeTypingCursor(currentAgentBubble);
+      currentAgentBubble = null;
+      showHITL(d.action_requests || []);
+      setStatus('pret');
+    });
+
+    evtSource.addEventListener('system_message', (e) => {
+      const d = JSON.parse(e.data);
+      appendSystemMessage(d.content || '');
+    });
+
+    evtSource.addEventListener('task_progress', (e) => {
+      const d = JSON.parse(e.data);
+      if (!d.task_id) return;
+      const t = _taskProgress[d.task_id];
+      if (t) {
+        updateProgressToast(d.task_id, d.current, d.total);
+      } else if (d.current === 0) {
+        showProgressToast(d.task_id, d.tool || 'task', d.total, d.target_lang);
+      }
+    });
+
+    evtSource.addEventListener('task_done', (e) => {
+      const d = JSON.parse(e.data);
+      if (!d.task_id) return;
+      removeProgressToast(d.task_id);
+      if (d.status === 'success') {
+        const label = d.output_file
+          ? `// ${d.tool} terminé\n→ ${d.output_file} (${d.chunks_count} chunks)`
+          : `// ${d.tool} terminé (${d.chunks_count} chunks, ${d.target_lang})`;
+        showToast(label, 'success');
+      } else {
+        showToast(`// ${d.tool} ERREUR\n${d.error || 'unknown error'}`, 'error', 10000);
+      }
+    });
+
+    evtSource.onerror = () => {
+      setStatus('deconnecte');
+      // EventSource auto-reconnects
+    };
+
+    evtSource.onopen = () => {
+      setStatus('pret');
+    };
+  }
+
+  /* ── LOAD HISTORY ── */
+  async function loadHistory() {
+    try {
+      const url = `/dashboard/w/${WORKSPACE_SLUG}/chat/history?limit=50`;
+      const resp = await fetch(url);
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      const welcome = document.getElementById('welcome-message');
+      if (welcome) welcome.remove();
+
+      if (data.messages.length === 0) {
+        const msgs = document.getElementById('messages');
+        msgs.innerHTML += `
+          <div id="welcome-message" style="text-align: center; padding: 40px 0;">
+            <div style="font-family: 'Orbitron', sans-serif; font-size: 0.9rem; color: rgba(0,245,255,0.3); letter-spacing: 0.1em;">HIVE<span style="color: rgba(191,0,255,0.3);">FLOWS</span></div>
+            <div class="mono dim mt-8" style="font-size: 0.72rem; letter-spacing: 0.15em;">// en attente d'un message</div>
+          </div>`;
+        return;
+      }
+
+      for (const m of data.messages) {
+        renderHistoryMessage(m);
+      }
+
+      hasMore = data.has_more;
+      if (data.messages.length > 0) {
+        oldestMessageId = data.messages[0].id;
+      }
+      document.getElementById('load-more-sentinel').style.display = hasMore ? 'block' : 'none';
+
+      scrollToBottom();
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!oldestMessageId || !hasMore) return;
+    const btn = document.getElementById('load-more-btn');
+    btn.disabled = true;
+    btn.textContent = 'Chargement...';
+
+    try {
+      const url = `/dashboard/w/${WORKSPACE_SLUG}/chat/history?limit=50&before=${oldestMessageId}`;
+      const resp = await fetch(url);
+      if (!resp.ok) return;
+      const data = await resp.json();
+
+      const container = document.getElementById('messages');
+      const sentinel = document.getElementById('load-more-sentinel');
+      const scrollBefore = container.scrollHeight;
+
+      // Insert messages after sentinel (at the top)
+      for (const m of data.messages) {
+        const el = renderHistoryMessage(m, true);
+      }
+
+      // Maintain scroll position
+      container.scrollTop += (container.scrollHeight - scrollBefore);
+
+      hasMore = data.has_more;
+      if (data.messages.length > 0) {
+        oldestMessageId = data.messages[0].id;
+      }
+      sentinel.style.display = hasMore ? 'block' : 'none';
+    } catch (err) {
+      console.error('Failed to load older messages:', err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Charger plus ancien...';
+    }
+  }
+
+  function renderHistoryMessage(m, prepend) {
+    if (m.role === 'user') {
+      const isMe = m.user_id === CURRENT_USER_ID;
+      return appendUserMsg(m.content, m.display_name || 'Anonyme', isMe, m.agent_id, prepend);
+    } else if (m.role === 'assistant') {
+      const el = appendAgentMsg(m.content, m.agent_id || 'agent', prepend);
+      const toolEvents = m.metadata?.tool_events;
+      if (toolEvents && toolEvents.length > 0) {
+        replayToolEvents(el.querySelector('.msg-bubble'), toolEvents);
+      }
+      return el;
+    } else {
+      appendSystemMessage(m.content, prepend);
+    }
+  }
+
+  /* ── DOM HELPERS ── */
+
+  function appendUserMsg(text, displayName, isMe, agentId, prepend) {
+    const msgs = document.getElementById('messages');
+    let rendered = escHtml(text);
+    // Render slash commands
+    if (rendered.match(/^\/[a-zA-Z]/)) {
+      rendered = rendered.replace(/^(\/[a-zA-Z0-9_-]+)/, '<span class="slash-tag">$1</span>');
+    }
+    // Render @mentions — cyan for agents, purple for humans, default for unknown
+    rendered = rendered.replace(/@([a-zA-Z0-9][a-zA-Z0-9._-]*)/g, (match, slug) => {
+      if (AGENT_IDS.has(slug)) return `<span class="mention-tag">@${slug}</span>`;
+      if (MEMBER_SLUGS.has(slug)) return `<span class="mention-tag mention-tag-human">@${slug}</span>`;
+      return `<span class="mention-tag mention-tag-unknown">@${slug}</span>`;
+    });
+
+    const div = document.createElement('div');
+    div.className = isMe ? 'msg msg-user' : 'msg msg-other';
+    div.innerHTML = `
+      <div class="msg-meta">${escHtml(displayName)}${agentId ? ` <span style="color:var(--text-dim);font-size:0.65rem;">&#10132; @${escHtml(agentId)}</span>` : ''}</div>
+      <div class="msg-bubble">${rendered}</div>`;
+
+    if (prepend) {
+      const sentinel = document.getElementById('load-more-sentinel');
+      sentinel.insertAdjacentElement('afterend', div);
+    } else {
+      msgs.appendChild(div);
+      scrollToBottom();
+    }
+    return div;
+  }
+
+  function appendAgentMsg(content, agentId, prepend) {
+    const msgs = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'msg msg-agent';
+    div.innerHTML = `
+      <div class="msg-meta" style="color:var(--text-dim)">@${escHtml(agentId || 'agent')}</div>
+      <div class="msg-bubble"><div class="md-content">${marked.parse(content)}</div></div>`;
+
+    if (prepend) {
+      const sentinel = document.getElementById('load-more-sentinel');
+      sentinel.insertAdjacentElement('afterend', div);
+    } else {
+      msgs.appendChild(div);
+      scrollToBottom();
+    }
+    return div;
+  }
+
+  function appendSystemMessage(text, prepend) {
+    const msgs = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'msg msg-system';
+    div.innerHTML = `
+      <div class="msg-meta">systeme</div>
+      <div class="msg-bubble">${escHtml(text)}</div>`;
+
+    if (prepend) {
+      const sentinel = document.getElementById('load-more-sentinel');
+      sentinel.insertAdjacentElement('afterend', div);
+    } else {
+      msgs.appendChild(div);
+      scrollToBottom();
+    }
+  }
+
+  function createAgentBubble(agentId) {
+    const msgs  = document.getElementById('messages');
+    const id    = 'bubble-' + Date.now();
+    const div   = document.createElement('div');
+    div.className = 'msg msg-agent';
+    div.innerHTML = `
+      <div class="msg-meta" style="color:var(--text-dim)">@${escHtml(agentId || 'agent')}</div>
+      <div class="msg-bubble" id="${id}" data-raw=""><div class="md-content"></div><span class="typing-cursor"></span></div>`;
+    msgs.appendChild(div);
+    scrollToBottom();
+    return document.getElementById(id);
+  }
+
+  function appendToken(bubble, text) {
+    bubble.dataset.raw += text;
+    const mdDiv = bubble.querySelector('.md-content');
+    mdDiv.innerHTML = marked.parse(bubble.dataset.raw);
+    scrollToBottom();
+  }
+
+  /* WeakMap to track the open <details> awaiting its tool result, per bubble */
+  const _pendingToolDetails = new WeakMap();
+
+  function _makeToolDetails(isAgentMsg) {
+    const details = document.createElement('details');
+    details.className = 'msg-tool-details mt-8';
+    if (isAgentMsg) details.style.borderColor = 'rgba(191,0,255,0.3)';
+    return details;
+  }
+
+  function appendToolCall(bubble, name, args) {
+    removeTypingCursor(bubble);
+    const isAgent = name === 'message_agent' || name === 'message_agent_async';
+    const details = _makeToolDetails(isAgent);
+    const summary = document.createElement('summary');
+
+    if (isAgent) {
+      const target = (args && args.agent_id) || '?';
+      const isAsync = name === 'message_agent_async';
+      summary.style.color = 'rgba(191,0,255,0.7)';
+      summary.textContent = `// ${isAsync ? 'async' : 'sync'} \u2192 @${target}`;
+      const pre = document.createElement('pre');
+      pre.style.color = 'rgba(191,0,255,0.5)';
+      pre.textContent = (args && args.message) || '';
+      details.appendChild(summary);
+      details.appendChild(pre);
+    } else {
+      summary.textContent = `// tool \u2192 ${name}`;
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(args, null, 2);
+      details.appendChild(summary);
+      details.appendChild(pre);
+    }
+
+    bubble.appendChild(details);
+    _pendingToolDetails.set(bubble, { details, name });
+    bubble.appendChild(Object.assign(document.createElement('span'), { className: 'typing-cursor' }));
+    scrollToBottom();
+  }
+
+  function appendToolResult(bubble, name, output) {
+    removeTypingCursor(bubble);
+    const isAgent = name === 'message_agent' || name === 'message_agent_async';
+    const pending = _pendingToolDetails.get(bubble);
+
+    if (pending && !isAgent) {
+      /* Append result inside the existing call <details> */
+      const sep = document.createElement('div');
+      sep.className = 'msg-tool-result-sep';
+      const label = document.createElement('div');
+      label.className = 'msg-tool-label';
+      label.style.color = 'var(--green)';
+      label.textContent = `// result \u2190 ${name}`;
+      const pre = document.createElement('pre');
+      pre.style.color = 'var(--green)';
+      pre.textContent = String(output);
+      sep.appendChild(label);
+      sep.appendChild(pre);
+      pending.details.appendChild(sep);
+      _pendingToolDetails.delete(bubble);
+    } else {
+      /* Standalone <details> for result (agent messages or unmatched) */
+      const details = _makeToolDetails(isAgent);
+      const summary = document.createElement('summary');
+      if (isAgent) {
+        summary.style.color = 'rgba(191,0,255,0.7)';
+        summary.textContent = `// response \u2190 @agent`;
+        const pre = document.createElement('pre');
+        pre.style.color = 'rgba(191,0,255,0.5)';
+        pre.textContent = String(output);
+        details.appendChild(summary);
+        details.appendChild(pre);
+      } else {
+        details.style.borderColor = 'rgba(0,255,136,0.2)';
+        summary.style.color = 'var(--green)';
+        summary.textContent = `// tool_result \u2190 ${name}`;
+        const pre = document.createElement('pre');
+        pre.style.color = 'var(--green)';
+        pre.textContent = String(output);
+        details.appendChild(summary);
+        details.appendChild(pre);
+      }
+      bubble.appendChild(details);
+    }
+
+    bubble.appendChild(Object.assign(document.createElement('span'), { className: 'typing-cursor' }));
+    scrollToBottom();
+  }
+
+  /* Replay stored tool events when rendering history messages */
+  function replayToolEvents(bubble, toolEvents) {
+    let i = 0;
+    while (i < toolEvents.length) {
+      const ev = toolEvents[i];
+      if (ev.type !== 'call') { i++; continue; }
+
+      const name = ev.name || '';
+      const args = ev.args;
+      const isAgent = name === 'message_agent' || name === 'message_agent_async';
+      const next = toolEvents[i + 1];
+      const resultEv = (next && next.type === 'result') ? next : null;
+
+      const details = _makeToolDetails(isAgent);
+      const summary = document.createElement('summary');
+
+      if (isAgent) {
+        const target = (args && args.agent_id) || '?';
+        const isAsync = name === 'message_agent_async';
+        summary.style.color = 'rgba(191,0,255,0.7)';
+        summary.textContent = `// ${isAsync ? 'async' : 'sync'} \u2192 @${target}`;
+        const pre = document.createElement('pre');
+        pre.style.color = 'rgba(191,0,255,0.5)';
+        pre.textContent = (args && args.message) || '';
+        details.appendChild(summary);
+        details.appendChild(pre);
+      } else {
+        summary.textContent = `// tool \u2192 ${name}`;
+        const pre = document.createElement('pre');
+        pre.textContent = JSON.stringify(args, null, 2);
+        details.appendChild(summary);
+        details.appendChild(pre);
+      }
+
+      if (resultEv && !isAgent) {
+        const sep = document.createElement('div');
+        sep.className = 'msg-tool-result-sep';
+        const label = document.createElement('div');
+        label.className = 'msg-tool-label';
+        label.style.color = 'var(--green)';
+        label.textContent = `// result \u2190 ${resultEv.name || name}`;
+        const pre = document.createElement('pre');
+        pre.style.color = 'var(--green)';
+        pre.textContent = String(resultEv.output || '');
+        sep.appendChild(label);
+        sep.appendChild(pre);
+        details.appendChild(sep);
+        i += 2;
+      } else {
+        i += 1;
+      }
+
+      bubble.appendChild(details);
+    }
+  }
+
+  function removeTypingCursor(bubble) {
+    if (bubble) bubble.querySelector('.typing-cursor')?.remove();
+  }
+
+  function showError(bubble, msg) {
+    removeTypingCursor(bubble);
+    bubble.innerHTML += `<span style="color:#ff5f56">!! ${escHtml(msg)}</span>`;
+  }
+
+  function showHITL(toolCalls) {
+    document.getElementById('hitl-payload').textContent = JSON.stringify(toolCalls, null, 2);
+    document.getElementById('hitl-box').style.display = 'block';
+    scrollToBottom();
+  }
+
+  /* ── UTILS ── */
+  function setStatus(text) {
+    const el = document.getElementById('agent-status');
+    el.className = text === 'pret' ? 'badge badge-active' : 'badge badge-running';
+    el.innerHTML = `<span class="badge-dot"></span>${escHtml(text)}`;
+  }
+
+  function scrollToBottom() {
+    const el = document.getElementById('messages');
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── CHAT SIDEBAR TOGGLE ── */
+  function toggleChatSidebar() {
+    const sidebar = document.getElementById('chat-sidebar');
+    sidebar.classList.toggle('chat-sidebar-hidden');
+  }
+
+  // Hide agents sidebar by default on mobile
+  if (window.innerWidth <= 768) {
+    document.getElementById('chat-sidebar').classList.add('chat-sidebar-hidden');
+  }
+
+  /* ── M5: @MENTION AUTOCOMPLETE ── */
+  const AGENTS = {{ agents | map(attribute='id') | list | tojson }};
+  const AGENT_NAMES = {{ agents | map(attribute='name') | list | tojson }};
+  const MEMBERS_LIST = {{ members | tojson }};
+  let mentionActive = false;
+  let mentionStart = -1;
+  let mentionSelectedIndex = 0;
+
+  function checkMention(el) {
+    // Check slash first
+    if (checkSlashCommand(el)) return;
+
+    const val = el.value;
+    const pos = el.selectionStart;
+
+    let atPos = -1;
+    for (let i = pos - 1; i >= 0; i--) {
+      if (val[i] === '@') { atPos = i; break; }
+      if (val[i] === ' ' || val[i] === '\n') break;
+    }
+
+    const dropdown = document.getElementById('mention-dropdown');
+    if (atPos === -1) {
+      dropdown.style.display = 'none';
+      mentionActive = false;
+      return;
+    }
+
+    const query = val.substring(atPos + 1, pos).toLowerCase();
+    const agentMatches = AGENTS.map((id, i) => ({ id, name: AGENT_NAMES[i], type: 'agent' }))
+      .filter(a => a.id.toLowerCase().includes(query) || a.name.toLowerCase().includes(query));
+    const memberMatches = MEMBERS_LIST.map(m => ({ id: m.slug, name: m.display_name, type: 'human' }))
+      .filter(m => m.id.toLowerCase().includes(query) || m.name.toLowerCase().includes(query));
+    const matches = [...agentMatches, ...memberMatches];
+
+    if (matches.length === 0) {
+      dropdown.style.display = 'none';
+      mentionActive = false;
+      return;
+    }
+
+    mentionActive = true;
+    mentionStart = atPos;
+    mentionSelectedIndex = Math.min(mentionSelectedIndex, matches.length - 1);
+
+    dropdown.innerHTML = matches.map((a, i) =>
+      `<div class="mention-item${i === mentionSelectedIndex ? ' mention-selected' : ''}" data-id="${a.id}" onclick="insertMention('${a.id}')">
+        <span class="${a.type === 'human' ? 'mention-id-human' : 'mention-id'}">@${escHtml(a.id)}</span>
+        <span class="mention-name">${escHtml(a.name)}</span>
+      </div>`
+    ).join('');
+    dropdown.style.display = 'block';
+  }
+
+  function insertMention(agentId) {
+    const el = document.getElementById('chat-input');
+    const pos = el.selectionStart;
+    const val = el.value;
+    const before = val.substring(0, mentionStart);
+    const after = val.substring(pos);
+    el.value = before + '@' + agentId + ' ' + after;
+    el.focus();
+    const newPos = mentionStart + agentId.length + 2;
+    el.setSelectionRange(newPos, newPos);
+    document.getElementById('mention-dropdown').style.display = 'none';
+    mentionActive = false;
+  }
+
+  /* ── N4: SLASH COMMAND AUTOCOMPLETE ── */
+  const SLASH_COMMANDS = [
+    { cmd: '/invite', help: '@slug [role] -- Inviter un utilisateur' },
+    { cmd: '/kick',   help: '@slug -- Retirer un utilisateur' },
+    { cmd: '/part',   help: '-- Quitter le workspace' },
+    { cmd: '/join',   help: '#workspace -- Rejoindre un workspace' },
+    { cmd: '/members', help: '-- Lister les membres' },
+    { cmd: '/help',   help: '-- Afficher les commandes' },
+  ];
+  let slashActive = false;
+  let slashSelectedIndex = 0;
+
+  function checkSlashCommand(el) {
+    const val = el.value;
+    const dropdown = document.getElementById('mention-dropdown');
+    if (!val.startsWith('/') || val.includes(' ')) {
+      if (slashActive) { dropdown.style.display = 'none'; slashActive = false; }
+      return false;
+    }
+    const query = val.substring(1).toLowerCase();
+    const matches = SLASH_COMMANDS.filter(c => c.cmd.substring(1).startsWith(query));
+    if (matches.length === 0) { dropdown.style.display = 'none'; slashActive = false; return false; }
+
+    slashActive = true;
+    slashSelectedIndex = Math.min(slashSelectedIndex, matches.length - 1);
+    dropdown.innerHTML = matches.map((c, i) =>
+      `<div class="mention-item${i === slashSelectedIndex ? ' mention-selected' : ''}" data-cmd="${c.cmd}" onclick="insertSlashCommand('${c.cmd}')">
+        <span class="mention-id">${escHtml(c.cmd)}</span>
+        <span class="mention-name">${escHtml(c.help)}</span>
+      </div>`
+    ).join('');
+    dropdown.style.display = 'block';
+    return true;
+  }
+
+  function insertSlashCommand(cmd) {
+    const el = document.getElementById('chat-input');
+    el.value = cmd + ' ';
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    document.getElementById('mention-dropdown').style.display = 'none';
+    slashActive = false;
+  }
+
+  /* ── KEYBOARD: mention/slash dropdown navigation ── */
+  const _baseHandleKey = handleKey;
+  handleKey = function(e) {
+    if (mentionActive || slashActive) {
+      const dropdown = document.getElementById('mention-dropdown');
+      const items = dropdown.querySelectorAll('.mention-item');
+      const idx = mentionActive ? mentionSelectedIndex : slashSelectedIndex;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const newIdx = Math.min(idx + 1, items.length - 1);
+        if (mentionActive) mentionSelectedIndex = newIdx; else slashSelectedIndex = newIdx;
+        items.forEach((el, i) => el.classList.toggle('mention-selected', i === newIdx));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const newIdx = Math.max(idx - 1, 0);
+        if (mentionActive) mentionSelectedIndex = newIdx; else slashSelectedIndex = newIdx;
+        items.forEach((el, i) => el.classList.toggle('mention-selected', i === newIdx));
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey || (slashActive && e.key === 'Tab')) {
+        e.preventDefault();
+        if (items[idx]) {
+          if (mentionActive) insertMention(items[idx].dataset.id);
+          else insertSlashCommand(items[idx].dataset.cmd);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        dropdown.style.display = 'none';
+        mentionActive = false;
+        slashActive = false;
+        return;
+      }
+    }
+    _baseHandleKey(e);
+  };
+
+  /* ── INIT ── */
+  document.addEventListener('DOMContentLoaded', async () => {
+    await loadHistory();
+    connectSSE();
+  });
+</script>
+
+<style>
+  .mention-dropdown {
+    position: absolute; bottom: 100%; left: 0; right: 0;
+    background: var(--bg-card, #1a1a2e); border: 1px solid rgba(0,245,255,0.15);
+    border-radius: 6px; max-height: 180px; overflow-y: auto; z-index: 100;
+    margin-bottom: 4px;
+  }
+  .mention-item {
+    padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+  }
+  .mention-item:hover, .mention-selected {
+    background: rgba(0,245,255,0.08);
+  }
+  .mention-id { color: var(--cyan, #00f5ff); }
+  .mention-id-human { color: var(--purple, #bf00ff); }
+  .mention-name { color: var(--text-dim, #888); font-size: 0.72rem; }
+  .mention-tag {
+    color: var(--cyan, #00f5ff); background: rgba(0,245,255,0.08);
+    padding: 1px 4px; border-radius: 3px; font-family: 'JetBrains Mono', monospace;
+  }
+  .mention-tag-human {
+    color: var(--purple, #bf00ff); background: rgba(191,0,255,0.10);
+  }
+  .mention-tag-unknown {
+    color: rgba(255,255,255,0.45); background: rgba(255,255,255,0.06);
+  }
+  .slash-tag {
+    color: var(--purple, #bf00ff); background: rgba(191,0,255,0.08);
+    padding: 1px 4px; border-radius: 3px; font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+  }
+  .msg-other {
+    padding: 6px 0;
+  }
+  .msg-other .msg-meta {
+    color: var(--purple, #bf00ff);
+    font-size: 0.72rem;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 2px;
+  }
+  .msg-other .msg-bubble {
+    background: rgba(191,0,255,0.06);
+    border-left: 2px solid rgba(191,0,255,0.3);
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+  }
+  .chat-sidebar-active {
+    background: rgba(0,245,255,0.08) !important;
+    border-left: 2px solid var(--cyan, #00f5ff);
+  }
+</style>
+{% endblock %}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Conversation{% endblock %}
+{% block page_title %}Conversation{% endblock %}
+{% block page_subtitle %}// {{ conversation.agent_id }} — {{ conversation.created_at.strftime('%d/%m/%Y %H:%M') }}{% endblock %}
+
+{% set active_page = 'conversations' %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/atom-one-dark.min.css"/>
+<script src="{{ static_v('marked.min.js') }}"></script>
+<script src="{{ static_v('highlight.min.js') }}"></script>
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/w/{{ workspace_slug }}/conversations" class="btn btn-ghost btn-sm">← Retour</a>
+  {% if can_chat %}
+  <a href="/dashboard/w/{{ workspace_slug }}/chat?agent_id={{ conversation.agent_id }}" class="btn btn-primary btn-sm">Continuer dans le chat</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="mono dim mb-16" style="font-size: 0.72rem;">
+  {{ messages | length }} message(s) · Agent: <span class="cyan">{{ conversation.agent_id }}</span> · ID: <span style="color: var(--text-dim);">{{ conversation.id }}</span>
+</div>
+
+<div class="conversation-thread">
+  {% for msg in messages %}
+  <div class="msg {% if msg.role == 'user' %}msg-user{% else %}msg-agent{% endif %}" style="max-width: 80%;">
+    <div class="msg-meta">
+      {% if msg.role == 'user' %}{{ msg.display_name or 'Utilisateur' }}{% else %}@{{ msg.agent_id or conversation.agent_id }}{% endif %}
+      <span style="margin-left: 8px; font-size: 0.58rem; color: var(--text-dim);">{{ msg.created_at.strftime('%H:%M:%S') }}</span>
+    </div>
+    <div class="msg-bubble">
+      {% if msg.role == 'user' %}
+        {{ msg.content }}
+      {% else %}
+        <div class="md-content" data-raw="{{ msg.content | e }}"></div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if not messages %}
+<div class="empty-state">
+  <div class="empty-state-icon">◈</div>
+  <div class="empty-state-title">Conversation vide</div>
+  <div class="empty-state-sub">Aucun message dans cette conversation.</div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  marked.setOptions({
+    highlight: (code, lang) => {
+      if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value;
+      return hljs.highlightAuto(code).value;
+    },
+    breaks: true, gfm: true, langPrefix: 'hljs language-',
+  });
+
+  document.querySelectorAll('.md-content[data-raw]').forEach(el => {
+    const raw = el.dataset.raw;
+    if (raw) el.innerHTML = marked.parse(raw);
+  });
+</script>
+{% endblock %}

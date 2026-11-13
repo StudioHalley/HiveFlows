@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Conversations{% endblock %}
+{% block page_title %}Conversations{% endblock %}
+{% block page_subtitle %}// historique — {{ workspace.slug }}{% endblock %}
+
+{% set active_page = 'conversations' %}
+
+{% block content %}
+
+<!-- FILTERS -->
+<div class="flex" style="gap: 12px; margin-bottom: 24px; flex-wrap: wrap; align-items: flex-end;">
+  <form method="get" action="/dashboard/w/{{ workspace_slug }}/conversations" class="flex" style="gap: 12px; flex-wrap: wrap; align-items: flex-end;">
+    <div>
+      <label class="form-label">Agent</label>
+      <select name="agent_id" class="form-select" style="width: 200px;">
+        <option value="">Tous les agents</option>
+        {% for a in agents %}
+        <option value="{{ a.id }}" {% if filter_agent_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Recherche</label>
+      <input class="form-input" name="q" value="{{ filter_q or '' }}" placeholder="Rechercher dans les messages..." style="width: 280px;" />
+    </div>
+    <button type="submit" class="btn btn-ghost btn-sm" style="margin-bottom: 2px;">Filtrer</button>
+    {% if filter_agent_id or filter_q %}
+    <a href="/dashboard/w/{{ workspace_slug }}/conversations" class="btn btn-ghost btn-sm" style="margin-bottom: 2px; color: var(--text-dim);">Effacer</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="mono dim mb-16" style="font-size: 0.72rem;">{{ total }} conversation(s){% if filter_agent_id or filter_q %} (filtrees){% endif %}</div>
+
+{% if conversations %}
+<div class="table-wrapper">
+  <table>
+    <thead>
+      <tr>
+        <th>Agent</th>
+        <th>Dernier message</th>
+        <th>Messages</th>
+        <th>Date</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for conv in conversations %}
+      <tr>
+        <td>
+          <span class="mono cyan" style="font-size: 0.82rem;">{{ conv.agent_id }}</span>
+        </td>
+        <td style="max-width: 400px;">
+          <div style="font-size: 0.82rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            {{ conv.last_message or '—' }}
+          </div>
+        </td>
+        <td>
+          <span class="badge badge-pending">{{ conv.message_count }}</span>
+        </td>
+        <td>
+          <span class="mono dim" style="font-size: 0.75rem;">{{ conv.updated_at.strftime('%d/%m %H:%M') }}</span>
+        </td>
+        <td>
+          <a href="/dashboard/w/{{ workspace_slug }}/conversations/{{ conv.id }}" class="btn btn-ghost btn-sm">Voir</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- PAGINATION -->
+{% if total > limit %}
+<div class="flex" style="gap: 8px; margin-top: 20px; justify-content: center;">
+  {% if offset > 0 %}
+  <a href="/dashboard/w/{{ workspace_slug }}/conversations?offset={{ offset - limit }}{% if filter_agent_id %}&agent_id={{ filter_agent_id }}{% endif %}{% if filter_q %}&q={{ filter_q }}{% endif %}" class="btn btn-ghost btn-sm">← Precedent</a>
+  {% endif %}
+  <span class="mono dim" style="font-size: 0.72rem; padding: 6px 12px;">{{ offset + 1 }}–{{ [offset + limit, total] | min }} / {{ total }}</span>
+  {% if offset + limit < total %}
+  <a href="/dashboard/w/{{ workspace_slug }}/conversations?offset={{ offset + limit }}{% if filter_agent_id %}&agent_id={{ filter_agent_id }}{% endif %}{% if filter_q %}&q={{ filter_q }}{% endif %}" class="btn btn-ghost btn-sm">Suivant →</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">◈</div>
+  <div class="empty-state-title">Aucune conversation</div>
+  <div class="empty-state-sub">Les conversations apparaitront ici apres votre premier chat.</div>
+  <a href="/dashboard/w/{{ workspace_slug }}/chat" class="btn btn-primary">Demarrer un chat</a>
+</div>
+{% endif %}
+
+{% endblock %}

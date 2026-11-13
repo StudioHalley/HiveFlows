@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd service for macOS.
+
+  Install:
+    cp com.hiveflows.portal-client.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.hiveflows.portal-client.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.hiveflows.portal-client.plist
+    rm ~/Library/LaunchAgents/com.hiveflows.portal-client.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hiveflows.portal-client</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/portal-client</string>
+    <string>run</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/portal-client.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/portal-client.log</string>
+</dict>
+</plist>

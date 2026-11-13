@@ -1,0 +1,5 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.0
+yt-dlp>=2024.12.13
+redis==5.2.0
+pyyaml==6.0.2

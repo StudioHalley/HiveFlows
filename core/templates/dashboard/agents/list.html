@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Agents{% endblock %}
+{% block page_title %}Agents{% endblock %}
+{% block breadcrumb_tail %}<span class="breadcrumb-sep">/</span><span class="breadcrumb-item">agents</span>{% endblock %}
+
+{% set active_page = 'agents' %}
+
+{% block topbar_actions %}
+  {% if can_create %}
+  <a href="/dashboard/w/{{ workspace_slug }}/agents/new" class="btn btn-primary">+ Nouvel agent</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+  <div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+{% if agents %}
+  <div class="mb-16">
+    <span class="mono dim">{{ agents | length }} agent(s) actif(s) dans <span class="cyan">{{ workspace.name }}</span></span>
+  </div>
+
+  <div class="agent-grid">
+    {% for agent in agents %}
+    <div class="agent-card" style="cursor: default;">
+      <div class="agent-card-header">
+        <div>
+          <div class="agent-card-name">{{ agent.name }}</div>
+          <div class="agent-card-id">// @{{ agent.id }}</div>
+        </div>
+        <span class="badge badge-active"><span class="badge-dot"></span>actif</span>
+      </div>
+
+      <p class="agent-card-desc">
+        {{ agent.description or "Aucune description." }}
+      </p>
+
+      <div class="agent-card-tags mb-16">
+        <span class="agent-tag" style="border-color: rgba(191,0,255,0.25); color: var(--purple);">⬢ {{ workspace.slug }}</span>
+        {% if agent.skills %}
+          {% for skill in agent.skills %}
+            <span class="agent-tag">skill:{{ skill }}</span>
+          {% endfor %}
+        {% endif %}
+        {% if agent.subagents %}
+          <span class="agent-tag">{{ agent.subagents | length }} subagent(s)</span>
+        {% endif %}
+        {% if agent.llm_config and agent.llm_config.model %}
+          <span class="agent-tag">{{ agent.llm_config.model }}</span>
+        {% endif %}
+        {% if agent.tools and "none" in agent.tools %}
+          <span class="agent-tag" style="color:var(--text-dim);border-color:rgba(255,255,255,0.1);">⊘ no tools</span>
+        {% elif agent.tools %}
+          {% for t in agent.tools %}<span class="agent-tag">{{ t }}</span>{% endfor %}
+        {% else %}
+          <span class="agent-tag">run_script</span>
+        {% endif %}
+        {% if 'message_agent' in (agent.tools or []) or 'message_agent_async' in (agent.tools or []) %}
+          <span class="agent-tag" style="border-color: rgba(191,0,255,0.25); color: var(--purple);">⟷ agent-to-agent</span>
+        {% endif %}
+      </div>
+
+      <div class="flex" style="gap: 8px; flex-wrap: wrap;">
+        {% if can_chat %}
+        <a href="/dashboard/w/{{ workspace_slug }}/chat?agent_id={{ agent.id }}" class="btn btn-ghost btn-sm">◈ Chat</a>
+        {% endif %}
+        {% if can_chat and agents | length > 1 %}
+        <button class="btn btn-ghost btn-sm" style="border-color: rgba(191,0,255,0.2); color: var(--purple);"
+                onclick="testMessageAgent('{{ agent.id }}')" title="Tester message_agent avec cet agent">⟷ Test msg</button>
+        {% endif %}
+        {% set is_owner = agent.owner_id is none or agent.owner_id | string == current_user_id %}
+        {% if can_create and is_owner %}
+        <a href="/dashboard/w/{{ workspace_slug }}/agents/{{ agent.id }}/edit" class="btn btn-ghost btn-sm">✎ Modifier</a>
+        {% endif %}
+        {% if can_delete %}
+        <form method="post" action="/dashboard/w/{{ workspace_slug }}/agents/{{ agent.id }}/remove-from-workspace" style="margin: 0;"
+              data-confirm="Retirer {{ agent.name }} de ce workspace ?">
+          <button type="submit" class="btn btn-ghost btn-sm" title="Retirer du workspace (ne supprime pas l agent)">⊘ Retirer</button>
+        </form>
+        {% if is_owner %}
+        <form method="post" action="/dashboard/w/{{ workspace_slug }}/agents/{{ agent.id }}/delete" style="margin: 0;"
+              data-confirm="Désactiver {{ agent.name }} définitivement ?">
+          <button type="submit" class="btn btn-danger btn-sm">✕</button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">◇</div>
+    <div class="empty-state-title">Aucun agent configure</div>
+    <div class="empty-state-sub">Creez votre premier agent pour commencer a chatter.</div>
+    {% if can_create %}
+    <a href="/dashboard/w/{{ workspace_slug }}/agents/new" class="btn btn-primary">+ Creer un agent</a>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% if available_agents and can_create %}
+  <div class="mt-32">
+    <div class="mb-16">
+      <span class="mono dim">Mes agents disponibles (pas encore dans ce workspace)</span>
+    </div>
+    <div class="agent-grid">
+      {% for agent in available_agents %}
+      <div class="agent-card" style="cursor: default; opacity: 0.7;">
+        <div class="agent-card-header">
+          <div>
+            <div class="agent-card-name">{{ agent.name }}</div>
+            <div class="agent-card-id">// @{{ agent.id }}</div>
+          </div>
+        </div>
+        <p class="agent-card-desc">{{ agent.description or "Aucune description." }}</p>
+        <form method="post" action="/dashboard/w/{{ workspace_slug }}/agents/{{ agent.id }}/add-to-workspace" style="margin: 0;">
+          <button type="submit" class="btn btn-primary btn-sm">+ Ajouter au workspace</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testMessageAgent(targetAgentId) {
+  const agents = {{ agents | map(attribute='id') | list | tojson }};
+  const others = agents.filter(a => a !== targetAgentId);
+  if (others.length === 0) { alert('Aucun autre agent disponible pour envoyer un message.'); return; }
+  const fromAgent = others[0];
+  const msg = prompt(`Envoyer un message a @${targetAgentId} depuis @${fromAgent} :`, `Bonjour @${targetAgentId}, comment vas-tu ?`);
+  if (!msg) return;
+  window.location.href = `/dashboard/w/{{ workspace_slug }}/chat?agent_id=${fromAgent}`;
+}
+</script>
+{% endblock %}

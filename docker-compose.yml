@@ -1,0 +1,159 @@
+services:
+
+  core:
+    build: ./core
+    ports:
+      - "8002:8000"
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Code servi depuis l'image (prod). Bind-mount du code réactivé en dev via override.
+      - ./skills:/skills
+      - ./portal-dist:/app/clients/portal/dist:ro
+      - agent_workspace:/agent-workspace
+      - ${WORKSPACE_DATA_PATH:-./workspace_data}:/workspace
+    networks:
+      - default
+      - hive-backend
+    restart: unless-stopped
+
+  worker:
+    build: ./workers
+    env_file: .env
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      # Code servi depuis l'image (prod). Bind-mount du code réactivé en dev via override.
+      - ${WORKSPACE_DATA_PATH:-./workspace_data}:/workspace
+      - ./skills:/skills
+    networks:
+      - default
+      - hive-backend
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  beekeeper:
+    build: ./beekeeper
+    container_name: beekeeper
+    # Pas de port exposé : beekeeper est un service interne uniquement
+    env_file: .env
+    environment:
+      # Chemin HOST absolu vers workspace_data — utilisé pour les specs volumes Docker des apps.
+      # Doit correspondre à WORKSPACE_DATA_PATH mais en chemin absolu sur l'hôte.
+      WORKSPACES_DATA_HOST_DIR: ${WORKSPACE_DATA_HOST_DIR:-}
+      # Chemin HOST absolu du repo — monté à l'IDENTIQUE (même chemin dans le container)
+      # pour que `docker compose` lancé par beekeeper résolve correctement les bind-mounts
+      # relatifs (./skills, ./apps…) contre le daemon de l'hôte. Active le self-update UI.
+      HIVE_REPO_HOST_DIR: ${HIVE_REPO_HOST_DIR:-}
+    volumes:
+      # Code servi depuis l'image (prod). Bind-mount du code réactivé en dev via override.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${WORKSPACE_DATA_PATH:-./workspace_data}:/workspace
+      - ./apps:/apps:ro
+      - nginx_conf:/nginx/conf.d
+      # Repo monté à l'IDENTIQUE (même chemin host↔container) pour le self-update.
+      # Sentinelle si non configuré : un dossier vide → self-update indisponible (pas d'erreur).
+      - ${HIVE_REPO_HOST_DIR:-/tmp/hive-selfupdate-off}:${HIVE_REPO_HOST_DIR:-/tmp/hive-selfupdate-off}
+      # Clé SSH (lecture seule) pour le `git pull` depuis Gitea. Sentinelle = dossier vide.
+      - ${HIVE_SSH_DIR:-/tmp/hive-selfupdate-off-ssh}:/root/.ssh:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_conf:/etc/nginx/conf.d
+    # Supprimer default.conf (conflict avec notre server block) avant démarrage
+    command: /bin/sh -c "rm -f /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+    depends_on:
+      - beekeeper
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower:2.0
+    ports:
+      - "8004:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery --broker=redis://redis:6379/0 flower
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:4-standalone
+    ports:
+      - "8005:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    restart: unless-stopped
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    ports:
+      - "8006:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - redisinsight_data:/data
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  redis_data:
+  agent_workspace:
+  nginx_conf:
+  redisinsight_data:
+
+networks:
+  hive-backend:
+    name: hive-backend
+    driver: bridge

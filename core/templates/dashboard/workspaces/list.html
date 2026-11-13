@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Workspaces{% endblock %}
+{% block page_title %}Workspaces{% endblock %}
+{% block page_subtitle %}// espaces de travail{% endblock %}
+
+{% set active_page = 'workspaces' %}
+
+{% block topbar_actions %}
+  <div class="flex" style="gap: 8px; align-items: center;">
+    <button id="btn-view-list" class="btn btn-ghost btn-sm" onclick="setView('list')" title="Vue liste">▤ Liste</button>
+    <button id="btn-view-tile" class="btn btn-ghost btn-sm" onclick="setView('tile')" title="Vue tuile">⊞ Tuile</button>
+    <a href="/dashboard/workspaces/new" class="btn btn-primary btn-sm">+ Nouveau workspace</a>
+  </div>
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+  <div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+<!-- RECHERCHE -->
+<div class="flex" style="gap: 12px; margin-bottom: 24px; align-items: flex-end;">
+  <form method="get" action="/dashboard/workspaces" class="flex" style="gap: 8px; align-items: flex-end;">
+    <div>
+      <label class="form-label">Recherche</label>
+      <input class="form-input" name="q" value="{{ filter_q or '' }}" placeholder="Rechercher dans les messages..." style="width: 320px;" />
+    </div>
+    <button type="submit" class="btn btn-ghost btn-sm" style="margin-bottom: 2px;">Filtrer</button>
+    {% if filter_q %}
+    <a href="/dashboard/workspaces" class="btn btn-ghost btn-sm" style="margin-bottom: 2px; color: var(--text-dim);">Effacer</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="mono dim mb-16" style="font-size: 0.72rem;">
+  {{ workspaces | length }} workspace(s){% if filter_q %} correspondant à "{{ filter_q }}"{% endif %}
+</div>
+
+{% if workspaces %}
+
+<!-- VUE LISTE -->
+<div id="view-list" class="table-wrapper">
+  <table>
+    <thead>
+      <tr>
+        <th>Workspace</th>
+        <th>Rôle</th>
+        <th>Membres</th>
+        <th>Agents</th>
+        {% if filter_q %}<th>Dernier message correspondant</th>{% endif %}
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ws in workspaces %}
+      <tr style="cursor: pointer;" onclick="window.location='/dashboard/w/{{ ws.slug }}/chat'">
+        <td>
+          <div style="font-weight: 500;">{{ ws.name }}</div>
+          <div class="mono dim" style="font-size: 0.7rem;">// {{ ws.slug }}</div>
+        </td>
+        <td>
+          <span class="badge {% if ws.role == 'owner' %}badge-active{% else %}badge-pending{% endif %}">
+            <span class="badge-dot"></span>{{ ws.role }}
+          </span>
+        </td>
+        <td>
+          <span class="mono" style="font-size: 0.82rem;">{{ ws.member_count }}</span>
+        </td>
+        <td>
+          <span class="mono" style="font-size: 0.82rem;">{{ ws.agent_count }}</span>
+        </td>
+        {% if filter_q %}
+        <td style="max-width: 300px;">
+          <div style="font-size: 0.78rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            {{ ws.last_match or '—' }}
+          </div>
+        </td>
+        {% endif %}
+        <td onclick="event.stopPropagation();">
+          <div class="flex" style="gap:6px; justify-content:flex-end;">
+            <a href="/dashboard/w/{{ ws.slug }}/files" class="btn btn-ghost btn-sm" title="Fichiers">◫</a>
+            {% if ws.role in ('owner', 'admin') %}
+            <a href="/dashboard/workspaces/{{ ws.slug }}/manage" class="btn btn-ghost btn-sm">Modifier</a>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- VUE TUILE -->
+<div id="view-tile" style="display: none;">
+  <div class="agent-grid">
+    {% for ws in workspaces %}
+    <div class="agent-card" style="cursor: pointer;" onclick="window.location='/dashboard/w/{{ ws.slug }}/chat'">
+      <div class="agent-card-header">
+        <div>
+          <div class="agent-card-name">{{ ws.name }}</div>
+          <div class="agent-card-id">// {{ ws.slug }}</div>
+        </div>
+        <span class="badge {% if ws.role == 'owner' %}badge-active{% else %}badge-pending{% endif %}">
+          <span class="badge-dot"></span>{{ ws.role }}
+        </span>
+      </div>
+
+      <p class="agent-card-desc">
+        {{ ws.description or "Aucune description." }}
+      </p>
+
+      <div class="agent-card-tags mb-16">
+        <span class="agent-tag">{{ ws.member_count }} membre(s)</span>
+        <span class="agent-tag">{{ ws.agent_count }} agent(s)</span>
+      </div>
+
+      {% if filter_q and ws.last_match %}
+      <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        ◈ {{ ws.last_match }}
+      </div>
+      {% endif %}
+
+      <div class="flex" style="gap: 8px;" onclick="event.stopPropagation();">
+        <a href="/dashboard/w/{{ ws.slug }}/files" class="btn btn-ghost btn-sm" title="Fichiers">◫ Fichiers</a>
+        {% if ws.role in ('owner', 'admin') %}
+          <a href="/dashboard/workspaces/{{ ws.slug }}/manage" class="btn btn-ghost btn-sm">Modifier</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">⬢</div>
+  <div class="empty-state-title">{% if filter_q %}Aucun résultat{% else %}Aucun workspace{% endif %}</div>
+  <div class="empty-state-sub">
+    {% if filter_q %}Aucun message ne correspond à "{{ filter_q }}".
+    {% else %}Votre workspace personnel sera créé automatiquement.{% endif %}
+  </div>
+  {% if not filter_q %}
+  <a href="/dashboard/workspaces/new" class="btn btn-primary">+ Créer un workspace</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function setView(v) {
+  document.getElementById('view-list').style.display = v === 'list' ? '' : 'none';
+  document.getElementById('view-tile').style.display = v === 'tile' ? '' : 'none';
+  document.getElementById('btn-view-list').classList.toggle('btn-primary', v === 'list');
+  document.getElementById('btn-view-list').classList.toggle('btn-ghost', v !== 'list');
+  document.getElementById('btn-view-tile').classList.toggle('btn-primary', v === 'tile');
+  document.getElementById('btn-view-tile').classList.toggle('btn-ghost', v !== 'tile');
+  try { localStorage.setItem('ws_view', v); } catch(e) {}
+}
+(function() {
+  var saved = 'list';
+  try { saved = localStorage.getItem('ws_view') || 'list'; } catch(e) {}
+  setView(saved);
+})();
+</script>
+{% endblock %}

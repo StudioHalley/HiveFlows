@@ -1,0 +1,18 @@
+httpx
+requests
+pydantic
+trafilatura
+Pillow
+pyzbar
+# convert_file tool
+pdfminer.six
+markdown
+beautifulsoup4
+markdownify
+weasyprint
+mammoth
+EbookLib
+pyyaml
+xmltodict
+# playwright_browser tool
+playwright

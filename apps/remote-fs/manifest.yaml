@@ -1,0 +1,19 @@
+name: Remote FS
+slug: remote-fs
+version: "1.0"
+description: "Synchronisation de /workspace entre instances HiveFlows — REST + WebSocket sync daemon"
+image: hiveflows/remote-fs:latest
+type: backend
+ingress: none
+port: 8090
+
+resources:
+  memory: 256m
+  cpus: "0.5"
+
+mounts:
+  - host: "."
+    container: "/workspace"
+    description: "Workspace — config et DB dans .hive/remote-fs/, fichiers synchronisés à la racine"
+
+icon: mdi-folder-sync

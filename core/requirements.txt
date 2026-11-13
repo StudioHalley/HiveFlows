@@ -1,0 +1,42 @@
+fastapi>=0.135.2
+uvicorn[standard]>=0.42.0
+pydantic>=2.12.5
+pydantic-settings>=2.13.1
+sqlalchemy[asyncio]>=2.0.48
+asyncpg>=0.31.0
+alembic>=1.18.4
+httpx>=0.28.1
+deepagents>=0.4.12
+langchain-openai>=0.3.0
+langgraph-checkpoint-postgres>=3.0.5
+psycopg[binary,pool]>=3.3.3
+celery[redis]>=5.6.3
+jinja2>=3.1.6
+python-multipart>=0.0.22
+# Auth JWT (Phase 4)
+python-jose[cryptography]>=3.5.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0,<4.1
+email-validator>=2.3.0
+# OAuth2 (Phase 4 — Bloc H)
+authlib>=1.6.9
+itsdangerous>=2.2.0
+# Rate limiting (Phase 4 — K10)
+slowapi>=0.1.9
+# Multi-provider LLM (Phase 5)
+langchain-anthropic>=0.3
+langchain-google-genai>=2.0
+langchain-ollama>=0.3
+cryptography>=42.0
+# Skills tools dependencies
+trafilatura>=2.0.0
+requests>=2.33.0
+pdfminer.six
+markdown
+beautifulsoup4
+markdownify
+weasyprint
+mammoth
+EbookLib
+pyyaml
+xmltodict

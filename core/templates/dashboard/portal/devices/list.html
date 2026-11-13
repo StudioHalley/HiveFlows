@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Portal Devices — {{ workspace.name }}{% endblock %}
+{% block page_title %}Portal Devices{% endblock %}
+{% block breadcrumb_tail %}
+  <span class="breadcrumb-sep">/</span>
+  <a href="/dashboard/w/{{ workspace_slug }}/" class="breadcrumb-item">{{ workspace_slug }}</a>
+  <span class="breadcrumb-sep">/</span>
+  <span class="breadcrumb-item">portal</span>
+{% endblock %}
+
+{% block head %}
+<style>
+.status-badge-connected    { color: var(--green);    border-color: rgba(0,255,136,0.3);  background: rgba(0,255,136,0.06); }
+.status-badge-disconnected { color: var(--text-dim); border-color: rgba(100,130,160,0.2); background: transparent; }
+.status-badge-pending      { color: var(--cyan);     border-color: rgba(0,245,255,0.3);  background: rgba(0,245,255,0.06); }
+.status-badge-revoked      { color: #ff4466;         border-color: rgba(255,50,80,0.3);  background: rgba(255,50,80,0.06); }
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: 4px; border: 1px solid;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.68rem; letter-spacing: 0.04em;
+}
+.pulse-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+  animation: pulse-anim 1.4s infinite;
+}
+@keyframes pulse-anim { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+/* Modal */
+.portal-modal {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  align-items: center; justify-content: center;
+}
+.portal-modal.open { display: flex; }
+.portal-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+}
+.portal-modal-box {
+  position: relative; z-index: 1;
+  background: var(--dark2); border: 1px solid var(--border);
+  border-radius: 10px; width: 480px; max-width: 95vw;
+}
+.portal-modal-header {
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.85rem; color: var(--cyan);
+}
+.portal-modal-body { padding: 20px; }
+.portal-modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+.cmd-box {
+  background: rgba(0,0,0,0.4); border: 1px solid rgba(0,245,255,0.2);
+  border-radius: 6px; padding: 12px 14px;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.72rem;
+  color: var(--cyan); word-break: break-all; line-height: 1.6;
+  margin-top: 12px;
+}
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator { display: inline; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+  <button class="btn btn-ghost btn-sm" onclick="openDownloadModal()">
+    <i class="mdi mdi-download" style="color: var(--cyan);"></i> Download client
+  </button>
+  {% if role in ('owner', 'admin', 'member') %}
+  <button class="btn btn-primary btn-sm" onclick="openCreateModal()">
+    <i class="mdi mdi-router-network" style="color: var(--dark);"></i> Ajouter un device
+  </button>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+<div class="flash flash-{{ flash.type }}" style="margin-bottom:16px;">{{ flash.message }}</div>
+{% endif %}
+
+{% if devices %}
+<div class="mono dim mb-16" style="font-size:0.72rem;">
+  <i class="mdi mdi-router-network" style="color:var(--cyan);margin-right:4px;"></i>
+  {{ devices | length }} device(s)
+</div>
+
+<div class="table-wrapper">
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="background:rgba(0,245,255,0.04);border-bottom:1px solid var(--border);">
+        <th style="text-align:left;padding:12px 16px;font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Device</th>
+        <th style="text-align:left;padding:12px 16px;font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Statut</th>
+        <th style="text-align:left;padding:12px 16px;font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Dernière activité</th>
+        <th style="text-align:left;padding:12px 16px;font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Services</th>
+        <th style="padding:12px 16px;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in devices %}
+      <tr style="border-bottom:1px solid rgba(0,245,255,0.05);cursor:pointer;"
+          onclick="window.location='/dashboard/w/{{ workspace_slug }}/portal/devices/{{ d.id }}'">
+
+        <td style="padding:12px 16px;">
+          <div style="font-size:0.85rem;font-weight:600;">{{ d.name }}</div>
+          <div class="mono dim" style="font-size:0.68rem;margin-top:2px;">{{ d.slug }}</div>
+        </td>
+
+        <td style="padding:12px 16px;">
+          <span class="status-badge status-badge-{{ d.status.value }}">
+            {% if d.status.value == 'connected' %}<span class="pulse-dot"></span>{% endif %}
+            {{ d.status.value }}
+          </span>
+        </td>
+
+        <td style="padding:12px 16px;font-size:0.75rem;color:var(--text-dim);">
+          {% if d.last_seen_at %}
+          <span class="rel-time" data-ts="{{ d.last_seen_at.isoformat() }}">{{ d.last_seen_at.strftime('%Y-%m-%d %H:%M') }}</span>
+          {% else %}
+          <span class="dim">—</span>
+          {% endif %}
+        </td>
+
+        <td style="padding:12px 16px;">
+          {% if d.services %}
+          <span class="mono" style="font-size:0.75rem;color:var(--cyan);">{{ d.services | length }}</span>
+          <span class="dim" style="font-size:0.72rem;"> service(s)</span>
+          {% else %}
+          <span class="dim" style="font-size:0.72rem;">aucun</span>
+          {% endif %}
+        </td>
+
+        <td style="padding:12px 16px;text-align:right;" onclick="event.stopPropagation();">
+          <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <a href="/dashboard/w/{{ workspace_slug }}/portal/devices/{{ d.id }}"
+               class="btn btn-ghost btn-sm">
+              <i class="mdi mdi-eye-outline" style="color:var(--cyan);"></i> Détail
+            </a>
+            {% if d.status.value != 'revoked' and role in ('owner', 'admin') %}
+            <form method="post" action="/dashboard/w/{{ workspace_slug }}/portal/devices/{{ d.id }}/revoke"
+                  data-confirm="Révoquer {{ d.name }} ? La connexion sera fermée immédiatement et le token invalidé.">
+              <button type="submit" class="btn btn-ghost btn-sm">
+                <i class="mdi mdi-cancel" style="color:#ff4466;"></i> Révoquer
+              </button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">
+    <i class="mdi mdi-router-network-wireless" style="font-size:3rem;color:var(--cyan);opacity:0.4;"></i>
+  </div>
+  <div class="empty-state-title">Aucun device enregistré</div>
+  <div class="empty-state-sub">Ajoutez un device pour exposer vos services locaux via le tunnel portal.</div>
+  {% if role in ('owner', 'admin', 'member') %}
+  <button class="btn btn-primary" style="margin-top:20px;" onclick="openCreateModal()">
+    <i class="mdi mdi-router-network" style="color:var(--dark);"></i> Ajouter un device
+  </button>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ── Download Client Modal ──────────────────────────────────────────────── -->
+<div class="portal-modal" id="download-modal">
+  <div class="portal-backdrop" onclick="closeDownloadModal()"></div>
+  <div class="portal-modal-box" style="width:520px;">
+    <div class="portal-modal-header">
+      <span><i class="mdi mdi-download" style="margin-right:8px;"></i>portal-client — téléchargement</span>
+      <button onclick="closeDownloadModal()" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:1.1rem;">✕</button>
+    </div>
+    <div class="portal-modal-body">
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:18px;line-height:1.5;">
+        Téléchargez le client portal adapté à votre plateforme. Après l'installation, utilisez la commande d'enrôlement affichée lors de l'ajout d'un device.
+      </p>
+
+      <!-- macOS -->
+      <div style="margin-bottom:14px;">
+        <div class="mono" style="font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
+          <i class="mdi mdi-apple" style="color:var(--cyan);margin-right:4px;"></i>macOS
+        </div>
+        <div style="display:flex;gap:8px;">
+          <a href="/dashboard/portal/client/download/portal-client-darwin-arm64"
+             class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;">
+            <i class="mdi mdi-chip" style="color:var(--cyan);"></i> Apple Silicon (arm64)
+          </a>
+          <a href="/dashboard/portal/client/download/portal-client-darwin-amd64"
+             class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;">
+            <i class="mdi mdi-chip" style="color:var(--text-dim);"></i> Intel (amd64)
+          </a>
+        </div>
+      </div>
+
+      <!-- Linux -->
+      <div style="margin-bottom:14px;">
+        <div class="mono" style="font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
+          <i class="mdi mdi-linux" style="color:var(--cyan);margin-right:4px;"></i>Linux
+        </div>
+        <div style="display:flex;gap:8px;">
+          <a href="/dashboard/portal/client/download/portal-client-linux-arm64"
+             class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;">
+            <i class="mdi mdi-chip" style="color:var(--cyan);"></i> ARM64
+          </a>
+          <a href="/dashboard/portal/client/download/portal-client-linux-amd64"
+             class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;">
+            <i class="mdi mdi-chip" style="color:var(--text-dim);"></i> x86-64 (amd64)
+          </a>
+        </div>
+      </div>
+
+      <!-- Windows -->
+      <div style="margin-bottom:18px;">
+        <div class="mono" style="font-size:0.68rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">
+          <i class="mdi mdi-microsoft-windows" style="color:var(--cyan);margin-right:4px;"></i>Windows
+        </div>
+        <div style="display:flex;gap:8px;">
+          <a href="/dashboard/portal/client/download/portal-client-windows-amd64.exe"
+             class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;">
+            <i class="mdi mdi-chip" style="color:var(--text-dim);"></i> x86-64 (amd64)
+          </a>
+        </div>
+      </div>
+
+      <!-- Checksums -->
+      <div style="border-top:1px solid var(--border);padding-top:12px;">
+        <a href="/dashboard/portal/client/download/checksums.sha256"
+           style="font-size:0.75rem;color:var(--text-dim);text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+          <i class="mdi mdi-shield-check-outline" style="color:var(--cyan);"></i>
+          checksums.sha256
+        </a>
+      </div>
+    </div>
+    <div class="portal-modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeDownloadModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Create Device Modal ────────────────────────────────────────────────── -->
+<div class="portal-modal" id="create-modal">
+  <div class="portal-backdrop" onclick="closeCreateModal()"></div>
+  <div class="portal-modal-box">
+    <div class="portal-modal-header">
+      <span><i class="mdi mdi-router-network" style="margin-right:8px;"></i>Ajouter un device</span>
+      <button onclick="closeCreateModal()" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:1.1rem;">✕</button>
+    </div>
+    <div id="create-modal-body">
+      <div class="portal-modal-body">
+        <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:16px;line-height:1.5;">
+          Donnez un nom à votre device. Un token d'enrôlement valide 15 minutes sera généré.
+        </p>
+        <form id="create-device-form"
+              hx-post="/dashboard/w/{{ workspace_slug }}/portal/devices/create"
+              hx-target="#create-modal-body"
+              hx-swap="innerHTML">
+          <div class="form-group">
+            <label class="form-label">Nom du device</label>
+            <input class="form-input" type="text" name="name" placeholder="NAS Maison" required autofocus
+                   style="width:100%;" />
+            <div class="form-hint">Donnera le slug automatiquement (ex: nas-maison)</div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="closeCreateModal()">Annuler</button>
+            <button type="submit" class="btn btn-primary btn-sm">
+              <span class="htmx-indicator dim">…</span>
+              <i class="mdi mdi-plus"></i> Créer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+<script>
+function openDownloadModal() {
+  document.getElementById('download-modal').classList.add('open');
+}
+function closeDownloadModal() {
+  document.getElementById('download-modal').classList.remove('open');
+}
+function openCreateModal() {
+  document.getElementById('create-modal').classList.add('open');
+  setTimeout(() => document.querySelector('#create-modal input[name=name]')?.focus(), 100);
+}
+function closeCreateModal() {
+  document.getElementById('create-modal').classList.remove('open');
+  // If a device was just created, reload to show it in the list
+  if (document.getElementById('create-modal-body').dataset.created) {
+    window.location.reload();
+  }
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') { closeCreateModal(); closeDownloadModal(); }
+});
+
+// Relative time
+document.querySelectorAll('.rel-time').forEach(function(el) {
+  const ts = el.dataset.ts;
+  if (!ts) return;
+  const d = new Date(ts + (ts.endsWith('Z') ? '' : 'Z'));
+  const diff = Math.floor((Date.now() - d) / 1000);
+  if (diff < 60)        el.textContent = 'il y a ' + diff + 's';
+  else if (diff < 3600) el.textContent = 'il y a ' + Math.floor(diff/60) + 'min';
+  else if (diff < 86400)el.textContent = 'il y a ' + Math.floor(diff/3600) + 'h';
+  else                  el.textContent = 'il y a ' + Math.floor(diff/86400) + 'j';
+});
+</script>
+{% endblock %}

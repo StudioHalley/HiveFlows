@@ -1,0 +1,31 @@
+name: VS Code Server
+slug: vscode-server
+version: "1.0"
+description: "Éditeur de code complet dans le navigateur"
+image: ghcr.io/coder/code-server:latest
+type: persistent
+ingress: iframe
+port: 8080
+health_check: /healthz
+
+env:
+  - key: PASSWORD
+    description: "Mot de passe d'accès"
+    required: true
+    secret: true
+    default: ""
+
+mounts:
+  - host: ".hive/code"
+    container: "/home/coder/workspace"
+    description: "Répertoire de code du workspace"
+  - host: "."
+    container: "/workspace"
+    description: "Workspace data — fichiers écrits ici sont accessibles dans le workspace"
+
+resources:
+  memory: 512m
+  cpus: "1.0"
+  user: "1000:1000"
+
+icon: mdi-microsoft-visual-studio-code

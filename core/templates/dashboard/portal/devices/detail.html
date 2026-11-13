@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}{{ device.name }} — Portal — {{ workspace.name }}{% endblock %}
+{% block page_title %}{{ device.name }}{% endblock %}
+{% block breadcrumb_tail %}
+  <span class="breadcrumb-sep">/</span>
+  <a href="/dashboard/w/{{ workspace_slug }}/" class="breadcrumb-item">{{ workspace_slug }}</a>
+  <span class="breadcrumb-sep">/</span>
+  <a href="/dashboard/w/{{ workspace_slug }}/portal/devices" class="breadcrumb-item">portal</a>
+  <span class="breadcrumb-sep">/</span>
+  <span class="breadcrumb-item">{{ device.slug }}</span>
+{% endblock %}
+
+{% block head %}
+<style>
+.status-badge-connected    { color: var(--green);    border-color: rgba(0,255,136,0.3);  background: rgba(0,255,136,0.06); }
+.status-badge-disconnected { color: var(--text-dim); border-color: rgba(100,130,160,0.2); background: transparent; }
+.status-badge-pending      { color: var(--cyan);     border-color: rgba(0,245,255,0.3);  background: rgba(0,245,255,0.06); }
+.status-badge-revoked      { color: #ff4466;         border-color: rgba(255,50,80,0.3);  background: rgba(255,50,80,0.06); }
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 4px; border: 1px solid;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.72rem; letter-spacing: 0.04em;
+}
+.pulse-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+  animation: pulse-anim 1.4s infinite;
+}
+@keyframes pulse-anim { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+.svc-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; margin: 3px;
+  background: rgba(0,245,255,0.06); border: 1px solid rgba(0,245,255,0.15);
+  border-radius: 4px; font-family: 'Share Tech Mono', monospace; font-size: 0.72rem;
+  color: var(--cyan);
+}
+.method-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.65rem;
+  font-weight: 600; letter-spacing: 0.05em;
+}
+.method-GET    { background:rgba(0,245,255,0.12); color:var(--cyan); }
+.method-POST   { background:rgba(0,255,136,0.12); color:var(--green); }
+.method-PUT    { background:rgba(191,0,255,0.12); color:var(--purple); }
+.method-DELETE { background:rgba(255,50,80,0.12); color:#ff5f56; }
+.method-PATCH  { background:rgba(255,200,0,0.12); color:#ffc800; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/w/{{ workspace_slug }}/portal/devices" class="btn btn-ghost btn-sm">
+    <i class="mdi mdi-arrow-left" style="color:var(--cyan);"></i> Retour
+  </a>
+  {% if device.status.value != 'revoked' and role in ('owner', 'admin') %}
+  <form method="post" action="/dashboard/w/{{ workspace_slug }}/portal/devices/{{ device.id }}/revoke"
+        data-confirm="Révoquer {{ device.name }} ? La connexion sera fermée immédiatement et le token invalidé." style="display:inline;">
+    <button type="submit" class="btn btn-ghost btn-sm">
+      <i class="mdi mdi-cancel" style="color:#ff4466;"></i> Révoquer
+    </button>
+  </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+<div class="flash flash-{{ flash.type }}" style="margin-bottom:16px;">{{ flash.message }}</div>
+{% endif %}
+
+<!-- ── Info card ──────────────────────────────────────────────────────────── -->
+<div class="card mb-16">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <div class="card-title">
+      <i class="mdi mdi-router-network" style="color:var(--cyan);margin-right:6px;"></i>
+      Informations
+    </div>
+    <span class="status-badge status-badge-{{ device.status.value }}">
+      {% if device.status.value == 'connected' %}<span class="pulse-dot"></span>{% endif %}
+      {{ device.status.value }}
+    </span>
+  </div>
+  <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div>
+      <div class="form-label">Nom</div>
+      <div style="font-size:0.9rem;">{{ device.name }}</div>
+    </div>
+    <div>
+      <div class="form-label">Slug</div>
+      <div class="mono" style="font-size:0.85rem;color:var(--cyan);">{{ device.slug }}</div>
+    </div>
+    <div>
+      <div class="form-label">Créé le</div>
+      <div class="mono dim" style="font-size:0.75rem;">{{ device.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+    </div>
+    <div>
+      <div class="form-label">Dernière activité</div>
+      <div class="mono dim" style="font-size:0.75rem;">
+        {% if device.last_seen_at %}
+        <span class="rel-time" data-ts="{{ device.last_seen_at.isoformat() }}">{{ device.last_seen_at.strftime('%Y-%m-%d %H:%M') }}</span>
+        {% else %}
+        —
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Services card ──────────────────────────────────────────────────────── -->
+<div class="card mb-16">
+  <div class="card-header">
+    <div class="card-title">
+      <i class="mdi mdi-api" style="color:var(--cyan);margin-right:6px;"></i>
+      Services exposés
+      {% if device.services %}<span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px;">({{ device.services | length }})</span>{% endif %}
+    </div>
+  </div>
+  <div class="card-body">
+    {% if device.services %}
+    <div>
+      {% for svc in device.services %}
+      <span class="svc-chip">
+        <i class="mdi mdi-circle-small"></i>
+        {{ svc.name }}
+      </span>
+      {% endfor %}
+    </div>
+    <p class="dim" style="font-size:0.7rem;margin-top:10px;">
+      <i class="mdi mdi-lock-outline" style="color:var(--purple);margin-right:4px;"></i>
+      Les routes locales ne sont pas affichées pour des raisons de sécurité. Mis à jour lors de chaque connexion HELLO.
+    </p>
+    {% elif device.status.value == 'pending' %}
+    <p class="dim" style="font-size:0.8rem;">
+      <i class="mdi mdi-clock-outline" style="color:var(--cyan);margin-right:4px;"></i>
+      En attente d'enrôlement. Lancez <code class="mono" style="color:var(--cyan);">portal-client init</code> pour connecter ce device.
+    </p>
+    {% else %}
+    <p class="dim" style="font-size:0.8rem;">
+      Aucun service déclaré. Le client enverra la liste lors de la prochaine connexion.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Audit log card ─────────────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div class="card-title">
+      <i class="mdi mdi-history" style="color:var(--cyan);margin-right:6px;"></i>
+      Audit log
+      <span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px;">({{ total_audit }} entrées)</span>
+    </div>
+    {% if total_audit > 0 %}
+    <div class="mono dim" style="font-size:0.68rem;">
+      {{ audit_offset + 1 }}–{{ [audit_offset + audit_logs | length, total_audit] | min }} / {{ total_audit }}
+    </div>
+    {% endif %}
+  </div>
+  <div class="card-body" style="padding:0;">
+    {% if audit_logs %}
+    <table style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.06);font-size:0.68rem;color:var(--text-dim);">
+          <th style="text-align:left;padding:10px 14px;">Heure</th>
+          <th style="text-align:left;padding:10px 14px;">Source</th>
+          <th style="text-align:left;padding:10px 14px;">Méthode</th>
+          <th style="text-align:left;padding:10px 14px;">Service / Chemin</th>
+          <th style="text-align:left;padding:10px 14px;">Status</th>
+          <th style="text-align:left;padding:10px 14px;">Durée</th>
+          <th style="text-align:left;padding:10px 14px;">Erreur</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in audit_logs %}
+        <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+          <td style="padding:9px 14px;white-space:nowrap;font-size:0.72rem;color:var(--text-dim);">
+            {{ entry.ts.strftime('%H:%M:%S') }}<br>
+            <span style="font-size:0.65rem;">{{ entry.ts.strftime('%Y-%m-%d') }}</span>
+          </td>
+          <td style="padding:9px 14px;">
+            <span class="mono" style="font-size:0.68rem;">{{ entry.source.value }}</span>
+          </td>
+          <td style="padding:9px 14px;">
+            <span class="method-badge method-{{ entry.method }}">{{ entry.method }}</span>
+          </td>
+          <td style="padding:9px 14px;font-size:0.72rem;max-width:240px;overflow:hidden;text-overflow:ellipsis;">
+            <span style="color:var(--cyan);">{{ entry.service_slug }}</span>
+            <span class="dim">{{ entry.path }}</span>
+          </td>
+          <td style="padding:9px 14px;">
+            {% if entry.status_code %}
+            <span class="mono" style="font-size:0.72rem;
+              color: {% if entry.status_code < 300 %}var(--green)
+                     {% elif entry.status_code < 400 %}var(--cyan)
+                     {% elif entry.status_code < 500 %}#ffc800
+                     {% else %}#ff4466{% endif %};">
+              {{ entry.status_code }}
+            </span>
+            {% else %}
+            <span class="dim">—</span>
+            {% endif %}
+          </td>
+          <td style="padding:9px 14px;font-size:0.72rem;color:var(--text-dim);">
+            {% if entry.duration_ms is not none %}{{ entry.duration_ms }}<span class="dim">ms</span>{% else %}—{% endif %}
+          </td>
+          <td style="padding:9px 14px;font-size:0.68rem;color:#ff5f56;max-width:160px;overflow:hidden;text-overflow:ellipsis;">
+            {{ entry.error or '' }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    {% if total_audit > audit_limit %}
+    <div style="padding:12px 14px;display:flex;justify-content:center;gap:8px;border-top:1px solid rgba(255,255,255,0.04);">
+      {% if audit_offset > 0 %}
+      <a href="?offset={{ audit_offset - audit_limit }}" class="btn btn-ghost btn-sm">← Précédent</a>
+      {% endif %}
+      <span class="dim" style="font-size:0.72rem;padding:6px 0;">
+        {{ audit_offset + 1 }}–{{ [audit_offset + audit_limit, total_audit] | min }} sur {{ total_audit }}
+      </span>
+      {% if audit_offset + audit_limit < total_audit %}
+      <a href="?offset={{ audit_offset + audit_limit }}" class="btn btn-ghost btn-sm">Suivant →</a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="padding:32px;text-align:center;">
+      <i class="mdi mdi-history" style="font-size:2rem;color:var(--text-dim);opacity:0.3;display:block;margin-bottom:8px;"></i>
+      <div class="dim" style="font-size:0.82rem;">Aucune activité enregistrée</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.rel-time').forEach(function(el) {
+  const ts = el.dataset.ts;
+  if (!ts) return;
+  const d = new Date(ts + (ts.endsWith('Z') ? '' : 'Z'));
+  const diff = Math.floor((Date.now() - d) / 1000);
+  if (diff < 60)         el.textContent = 'il y a ' + diff + 's';
+  else if (diff < 3600)  el.textContent = 'il y a ' + Math.floor(diff/60) + 'min';
+  else if (diff < 86400) el.textContent = 'il y a ' + Math.floor(diff/3600) + 'h';
+  else                   el.textContent = 'il y a ' + Math.floor(diff/86400) + 'j';
+});
+</script>
+{% endblock %}

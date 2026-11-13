@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HiveFlows — Collaboration Humain × IA</title>
+  <link rel="icon" type="image/png" sizes="96x96" href="favicon/favicon-96x96.png" />
+  <link rel="icon" type="image/svg+xml" href="favicon/favicon.svg" />
+  <link rel="shortcut icon" href="favicon/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png" />
+  <link rel="manifest" href="favicon/site.webmanifest" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&display=swap');
+
+    :root {
+      --cyan: #00f5ff;
+      --purple: #bf00ff;
+      --green: #00ff88;
+      --dark: #030810;
+      --dark2: #060d1a;
+      --grid: rgba(0, 245, 255, 0.04);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--dark);
+      color: #c8d8e8;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      cursor: crosshair;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* NAV */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 48px;
+      background: rgba(3, 8, 16, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0, 245, 255, 0.12);
+    }
+
+    .logo {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: var(--cyan);
+      text-shadow: 0 0 20px rgba(0, 245, 255, 0.6);
+    }
+    .logo span { color: var(--purple); }
+
+    .nav-right { display: flex; align-items: center; gap: 20px; }
+
+    .lang-toggle {
+      display: flex;
+      align-items: center;
+      background: rgba(0, 245, 255, 0.06);
+      border: 1px solid rgba(0, 245, 255, 0.2);
+      border-radius: 4px;
+      overflow: hidden;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+    }
+
+    .lang-btn {
+      padding: 6px 14px;
+      cursor: pointer;
+      color: #4a6580;
+      transition: background 0.2s, color 0.2s;
+      user-select: none;
+    }
+    .lang-btn.active { background: var(--cyan); color: var(--dark); font-weight: 700; }
+
+    .nav-badge {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--green);
+      border: 1px solid var(--green);
+      padding: 4px 12px;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+      text-shadow: 0 0 8px var(--green);
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.2);
+      animation: pulse-badge 2s ease-in-out infinite;
+    }
+    @keyframes pulse-badge { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    /* HERO */
+    .hero {
+      position: relative;
+      z-index: 10;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+    }
+
+    .hero-eyebrow {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.3em;
+      color: var(--purple);
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .hero-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(2.6rem, 6vw, 5.5rem);
+      font-weight: 900;
+      line-height: 1.05;
+      margin-bottom: 16px;
+    }
+
+    .hero-title .line1 {
+      display: block;
+      color: #e8f4ff;
+      text-shadow: 0 0 40px rgba(200, 216, 240, 0.3);
+    }
+
+    .hero-title .line2 {
+      display: block;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 20px rgba(0, 245, 255, 0.4));
+      position: relative;
+    }
+
+    .glitch { position: relative; }
+    .glitch::before, .glitch::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0; left: 0; width: 100%;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .glitch::before {
+      animation: glitch1 3.5s infinite;
+      clip-path: polygon(0 30%, 100% 30%, 100% 50%, 0 50%);
+    }
+    .glitch::after {
+      animation: glitch2 3.5s infinite;
+      clip-path: polygon(0 60%, 100% 60%, 100% 75%, 0 75%);
+    }
+    @keyframes glitch1 {
+      0%, 90%, 100% { transform: translate(0); opacity: 0; }
+      92% { transform: translate(-3px, 1px); opacity: 0.7; }
+      94% { transform: translate(3px, -1px); opacity: 0.7; }
+    }
+    @keyframes glitch2 {
+      0%, 90%, 100% { transform: translate(0); opacity: 0; }
+      93% { transform: translate(3px, -1px); opacity: 0.5; }
+      95% { transform: translate(-3px, 1px); opacity: 0.5; }
+    }
+
+    .hero-sub {
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      font-weight: 300;
+      color: #7a9bbd;
+      max-width: 600px;
+      line-height: 1.7;
+      margin: 24px auto 48px;
+    }
+    .hero-sub strong { color: var(--cyan); font-weight: 600; }
+
+    /* FORM */
+    .form-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .form-wrapper::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      background: linear-gradient(135deg, var(--cyan), var(--purple), var(--green));
+      border-radius: 6px;
+      z-index: -1;
+      opacity: 0.7;
+    }
+
+    .form-inner {
+      display: flex;
+      background: var(--dark2);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .form-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      padding: 16px 20px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.95rem;
+      color: #c8d8e8;
+      caret-color: var(--cyan);
+    }
+    .form-input::placeholder { color: rgba(120, 155, 190, 0.5); }
+
+    .form-btn {
+      background: linear-gradient(135deg, var(--cyan), var(--purple));
+      border: none;
+      padding: 16px 28px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--dark);
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: filter 0.2s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .form-btn:hover { filter: brightness(1.15) drop-shadow(0 0 12px rgba(0,245,255,0.5)); transform: scale(1.02); }
+    .form-btn:active { transform: scale(0.98); }
+    .form-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .form-note {
+      margin-top: 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      color: rgba(120, 155, 190, 0.5);
+      letter-spacing: 0.08em;
+    }
+    .form-note span { color: var(--green); }
+
+    .form-feedback {
+      margin-top: 12px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      min-height: 20px;
+    }
+    .form-feedback.success { color: var(--green); text-shadow: 0 0 8px var(--green); }
+    .form-feedback.error   { color: #ff5f56; }
+
+    /* STATS */
+    .stats { display: flex; gap: 48px; justify-content: center; margin-top: 64px; flex-wrap: wrap; }
+    .stat { text-align: center; }
+    .stat-num {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--cyan);
+      text-shadow: 0 0 20px rgba(0,245,255,0.5);
+    }
+    .stat-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      color: #4a6580;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    /* FEATURES */
+    .section { position: relative; z-index: 10; padding: 100px 24px; }
+    .section-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 16px;
+      color: #e8f4ff;
+    }
+    .section-sub {
+      text-align: center;
+      color: #4a6580;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 64px;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      background: rgba(6, 13, 26, 0.8);
+      border: 1px solid rgba(0, 245, 255, 0.1);
+      border-radius: 8px;
+      padding: 32px 28px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .feature-card:hover { border-color: rgba(0, 245, 255, 0.4); transform: translateY(-4px); }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--purple));
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-icon { font-size: 2rem; margin-bottom: 16px; display: block; }
+    .feature-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .feature-desc { font-size: 0.9rem; line-height: 1.7; color: #6a8aa8; }
+
+    /* TERMINAL */
+    .terminal-section { position: relative; z-index: 10; padding: 0 24px 100px; display: flex; justify-content: center; }
+    .terminal {
+      background: rgba(3, 8, 16, 0.95);
+      border: 1px solid rgba(0, 245, 255, 0.2);
+      border-radius: 10px;
+      max-width: 680px;
+      width: 100%;
+      overflow: hidden;
+      box-shadow: 0 0 60px rgba(0, 245, 255, 0.08);
+    }
+    .terminal-bar {
+      background: rgba(0, 245, 255, 0.06);
+      border-bottom: 1px solid rgba(0, 245, 255, 0.1);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .t-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .t-dot.red    { background: #ff5f56; }
+    .t-dot.yellow { background: #ffbd2e; }
+    .t-dot.green  { background: #27c93f; }
+    .terminal-title {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      color: #3a5470;
+      margin-left: 8px;
+      letter-spacing: 0.1em;
+    }
+    .terminal-body {
+      padding: 24px 28px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 2;
+    }
+    .t-prompt { color: var(--green); }
+    .t-cmd    { color: #c8d8e8; }
+    .t-output { color: var(--cyan); }
+    .t-purple { color: var(--purple); }
+    .t-green  { color: var(--green); }
+    .t-cursor {
+      display: inline-block;
+      width: 8px; height: 16px;
+      background: var(--cyan);
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* CTA BOTTOM */
+    .cta-section { position: relative; z-index: 10; padding: 100px 24px; text-align: center; }
+    .cta-box {
+      max-width: 700px;
+      margin: 0 auto;
+      background: rgba(6, 13, 26, 0.9);
+      border: 1px solid rgba(191, 0, 255, 0.2);
+      border-radius: 16px;
+      padding: 64px 48px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cta-box::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      background: linear-gradient(135deg, rgba(0,245,255,0.15), rgba(191,0,255,0.15));
+      border-radius: 18px;
+      z-index: -1;
+    }
+    .cta-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 900;
+      color: #e8f4ff;
+      margin-bottom: 16px;
+    }
+    .cta-sub {
+      color: #4a6580;
+      line-height: 1.7;
+      margin-bottom: 40px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* FOOTER */
+    footer {
+      position: relative;
+      z-index: 10;
+      border-top: 1px solid rgba(0, 245, 255, 0.08);
+      padding: 32px 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .footer-logo { font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 900; color: var(--cyan); opacity: 0.6; }
+    .footer-logo span { color: var(--purple); }
+    .footer-copy { font-family: 'Share Tech Mono', monospace; font-size: 0.65rem; color: #2a4060; letter-spacing: 0.1em; }
+
+    /* GLOW ORBS */
+    .orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 2; }
+    .orb1 { width: 600px; height: 600px; background: var(--cyan); top: -200px; left: -200px; opacity: 0.12; }
+    .orb2 { width: 500px; height: 500px; background: var(--purple); bottom: -150px; right: -150px; opacity: 0.12; }
+    .orb3 { width: 300px; height: 300px; background: var(--green); top: 40%; left: 60%; opacity: 0.06; }
+
+    /* RESPONSIVE */
+    @media (max-width: 640px) {
+      nav { padding: 16px 20px; }
+      .nav-badge { display: none; }
+      .form-inner { flex-direction: column; }
+      .stats { gap: 32px; }
+      footer { justify-content: center; text-align: center; }
+      .cta-box { padding: 40px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+
+  <!-- NAV -->
+  <nav>
+    <div class="logo">Hive<span>Flows</span></div>
+    <div class="nav-right">
+      <div class="lang-toggle">
+        <div class="lang-btn active" id="btn-fr" onclick="setLang('fr')">FR</div>
+        <div class="lang-btn"        id="btn-en" onclick="setLang('en')">EN</div>
+      </div>
+      <div class="nav-badge"
+           data-fr="▶ BÊTA BIENTÔT"
+           data-en="▶ BETA SOON">▶ BÊTA BIENTÔT</div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <p class="hero-eyebrow"
+       data-fr="// Accès bêta limité — rejoins la liste"
+       data-en="// Limited beta access — join the list">
+      // Accès bêta limité — rejoins la liste
+    </p>
+
+    <h1 class="hero-title">
+      <span class="line1" data-fr="Travaille avec des" data-en="Work alongside">Travaille avec des</span>
+      <span class="line2 glitch" data-text="Agents IA." data-fr="Agents IA." data-en="AI Agents.">Agents IA.</span>
+    </h1>
+
+    <p class="hero-sub"
+       data-fr="HiveFlows est la première plateforme où <strong>humains et agents IA</strong> collaborent en temps réel — dans le même espace, sur les mêmes projets, sans friction."
+       data-en="HiveFlows is the first platform where <strong>humans and AI agents</strong> collaborate in real time — in the same workspace, on the same projects, without friction.">
+      HiveFlows est la première plateforme où <strong>humains et agents IA</strong> collaborent en temps réel — dans le même espace, sur les mêmes projets, sans friction.
+    </p>
+
+    <div class="form-wrapper">
+      <div class="form-inner">
+        <input class="form-input" type="email" id="email-hero"
+               data-ph-fr="ton@email.com" data-ph-en="your@email.com"
+               placeholder="ton@email.com" autocomplete="email"/>
+        <button class="form-btn" id="btn-sub-hero"
+                data-fr="Rejoindre la bêta" data-en="Join the beta"
+                onclick="handleSignup('email-hero','feedback-hero','btn-sub-hero')">
+          Rejoindre la bêta
+        </button>
+      </div>
+    </div>
+    <div class="form-feedback" id="feedback-hero"></div>
+    <p class="form-note" id="note-hero"
+       data-fr="<span>✓</span> Pas de spam. Accès bêta gratuit. Annulable à tout moment."
+       data-en="<span>✓</span> No spam. Free beta access. Cancel anytime.">
+      <span>✓</span> Pas de spam. Accès bêta gratuit. Annulable à tout moment.
+    </p>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-num">∞</div>
+        <div class="stat-label" data-fr="Agents disponibles" data-en="Available agents">Agents disponibles</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">01</div>
+        <div class="stat-label" data-fr="Espace unifié" data-en="Unified workspace">Espace unifié</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">0ms</div>
+        <div class="stat-label" data-fr="Latence cible" data-en="Target latency">Latence cible</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="section">
+    <p class="section-sub">// core_modules</p>
+    <h2 class="section-title"
+        data-fr="Ce que HiveFlows débloque"
+        data-en="What HiveFlows unlocks">Ce que HiveFlows débloque</h2>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">🧠</span>
+        <div class="feature-title" data-fr="Agents intelligents intégrés" data-en="Built-in smart agents">Agents intelligents intégrés</div>
+        <p class="feature-desc"
+           data-fr="Des agents IA spécialisés travaillent à tes côtés — ils comprennent le contexte, prennent des décisions et exécutent des tâches pendant que tu te concentres sur l'essentiel."
+           data-en="Specialized AI agents work alongside you — understanding context, making decisions, and executing tasks while you focus on what matters.">
+          Des agents IA spécialisés travaillent à tes côtés — ils comprennent le contexte, prennent des décisions et exécutent des tâches pendant que tu te concentres sur l'essentiel.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔗</span>
+        <div class="feature-title" data-fr="Flows automatisés" data-en="Automated flows">Flows automatisés</div>
+        <p class="feature-desc"
+           data-fr="Construis des pipelines de travail qui connectent humains et IA de manière fluide. Délègue, valide, itère — tout dans un seul endroit."
+           data-en="Build work pipelines that seamlessly connect humans and AI. Delegate, validate, iterate — all in one place.">
+          Construis des pipelines de travail qui connectent humains et IA de manière fluide. Délègue, valide, itère — tout dans un seul endroit.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">⚡</span>
+        <div class="feature-title" data-fr="Collaboration en temps réel" data-en="Real-time collaboration">Collaboration en temps réel</div>
+        <p class="feature-desc"
+           data-fr="Ton équipe et tes agents IA dans le même espace de travail. Commentez, modifiez, décidez ensemble — sans changer d'outil."
+           data-en="Your team and AI agents in the same workspace. Comment, edit, decide together — without switching tools.">
+          Ton équipe et tes agents IA dans le même espace de travail. Commentez, modifiez, décidez ensemble — sans changer d'outil.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔐</span>
+        <div class="feature-title" data-fr="Contrôle total" data-en="Full control">Contrôle total</div>
+        <p class="feature-desc"
+           data-fr="Tu restes maître du jeu. Définis les permissions, valide les actions critiques, et garde une visibilité complète sur ce que font tes agents."
+           data-en="You stay in charge. Define permissions, validate critical actions, and keep full visibility over everything your agents do.">
+          Tu restes maître du jeu. Définis les permissions, valide les actions critiques, et garde une visibilité complète sur ce que font tes agents.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🌐</span>
+        <div class="feature-title" data-fr="Intégrations natives" data-en="Native integrations">Intégrations natives</div>
+        <p class="feature-desc"
+           data-fr="Connecte tes outils existants en quelques clics. HiveFlows s'intègre dans ton stack sans tout réinventer."
+           data-en="Connect your existing tools in a few clicks. HiveFlows plugs into your stack without reinventing everything.">
+          Connecte tes outils existants en quelques clics. HiveFlows s'intègre dans ton stack sans tout réinventer.
+        </p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📊</span>
+        <div class="feature-title" data-fr="Observabilité avancée" data-en="Advanced observability">Observabilité avancée</div>
+        <p class="feature-desc"
+           data-fr="Suis les performances de tes agents, identifie les goulots d'étranglement et optimise tes flows avec des données en temps réel."
+           data-en="Track your agents' performance, spot bottlenecks, and optimize your flows with real-time data.">
+          Suis les performances de tes agents, identifie les goulots d'étranglement et optimise tes flows avec des données en temps réel.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TERMINAL -->
+  <div class="terminal-section">
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="t-dot red"></div>
+        <div class="t-dot yellow"></div>
+        <div class="t-dot green"></div>
+        <span class="terminal-title">hiveflows — agent_shell v0.1.0</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="t-prompt">hive@flow:~$</span> <span class="t-cmd">init workspace --team "AlphaSquad"</span></div>
+        <div><span class="t-output">✓ Workspace created. 3 humans + 5 agents connected.</span></div>
+        <div>&nbsp;</div>
+        <div><span class="t-prompt">hive@flow:~$</span> <span class="t-cmd">assign --agent "ResearchBot" --task "Q2 market analysis"</span></div>
+        <div><span class="t-green">✓ Agent assigned. Results ready in 4 minutes.</span></div>
+        <div>&nbsp;</div>
+        <div><span class="t-prompt">hive@flow:~$</span> <span class="t-cmd">flow run pipeline/weekly-report.hive</span></div>
+        <div><span class="t-purple">→ [Agent#2] Collecting data...</span></div>
+        <div><span class="t-purple">→ [Agent#4] Generating report...</span></div>
+        <div><span class="t-purple">→ [Human]   Awaiting validation...</span></div>
+        <div><span class="t-output">✓ Pipeline completed in 2m 37s</span></div>
+        <div>&nbsp;</div>
+        <div><span class="t-prompt">hive@flow:~$</span> <span class="t-cursor"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA BOTTOM -->
+  <section class="cta-section">
+    <div class="cta-box">
+      <h2 class="cta-title"
+          data-fr="Prêt à rejoindre la première vague ?"
+          data-en="Ready to join the first wave?">Prêt à rejoindre la première vague ?</h2>
+      <p class="cta-sub"
+         data-fr="Les places bêta sont limitées. Inscris-toi maintenant pour être parmi les premiers à tester HiveFlows et façonner le futur de la collaboration Humain × IA."
+         data-en="Beta spots are limited. Sign up now to be among the first to test HiveFlows and shape the future of Human × AI collaboration.">
+        Les places bêta sont limitées. Inscris-toi maintenant pour être parmi les premiers à tester HiveFlows et façonner le futur de la collaboration Humain × IA.
+      </p>
+
+      <div class="form-wrapper">
+        <div class="form-inner">
+          <input class="form-input" type="email" id="email-cta"
+                 data-ph-fr="ton@email.com" data-ph-en="your@email.com"
+                 placeholder="ton@email.com" autocomplete="email"/>
+          <button class="form-btn" id="btn-sub-cta"
+                  data-fr="Accès bêta" data-en="Beta access"
+                  onclick="handleSignup('email-cta','feedback-cta','btn-sub-cta')">
+            Accès bêta
+          </button>
+        </div>
+      </div>
+      <div class="form-feedback" id="feedback-cta"></div>
+      <p class="form-note" id="note-cta" style="margin-top:14px"
+         data-fr="<span>✓</span> Gratuit pour la bêta. Aucune carte requise."
+         data-en="<span>✓</span> Free during beta. No credit card required.">
+        <span>✓</span> Gratuit pour la bêta. Aucune carte requise.
+      </p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">Hive<span>Flows</span></div>
+    <div class="footer-copy">© 2026 HIVEFLOWS.COM — ALL RIGHTS RESERVED</div>
+  </footer>
+
+  <script>
+    /* ── LANGUAGE SYSTEM ── */
+    let currentLang = 'fr';
+
+    function setLang(lang) {
+      currentLang = lang;
+      document.getElementById('btn-fr').classList.toggle('active', lang === 'fr');
+      document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+      document.documentElement.lang = lang;
+
+      // Text/HTML content elements
+      document.querySelectorAll('[data-fr]').forEach(el => {
+        const val = el.getAttribute('data-' + lang);
+        if (val === null) return;
+        const isHtml = el.classList.contains('hero-sub') || el.classList.contains('form-note') || el.tagName === 'P';
+        if (isHtml) { el.innerHTML = val; } else { el.textContent = val; }
+      });
+
+      // Placeholders
+      document.querySelectorAll('[data-ph-fr]').forEach(el => {
+        el.placeholder = el.getAttribute('data-ph-' + lang) || '';
+      });
+
+      // Glitch data-text sync
+      document.querySelectorAll('.glitch[data-' + lang + ']').forEach(el => {
+        el.setAttribute('data-text', el.getAttribute('data-' + lang));
+      });
+    }
+
+    /* ── SIGNUP ── */
+    const MSG = {
+      fr: {
+        invalid:   '⚠ Adresse email invalide.',
+        loading:   '⟳ Envoi en cours...',
+        success:   '✓ Inscrit ! On te contacte dès que la bêta ouvre.',
+        duplicate: 'ℹ Cette adresse est déjà enregistrée.',
+        error:     '✗ Erreur serveur — réessaie dans un instant.',
+      },
+      en: {
+        invalid:   '⚠ Invalid email address.',
+        loading:   '⟳ Sending...',
+        success:   '✓ Signed up! We\'ll reach out when the beta opens.',
+        duplicate: 'ℹ This email is already registered.',
+        error:     '✗ Server error — please try again shortly.',
+      }
+    };
+
+    async function handleSignup(inputId, feedbackId, btnId) {
+      const input    = document.getElementById(inputId);
+      const feedback = document.getElementById(feedbackId);
+      const btn      = document.getElementById(btnId);
+      const email    = input.value.trim();
+      const m        = MSG[currentLang];
+
+      feedback.className   = 'form-feedback';
+      feedback.textContent = '';
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        feedback.textContent = m.invalid;
+        feedback.classList.add('error');
+        return;
+      }
+
+      btn.disabled         = true;
+      feedback.textContent = m.loading;
+
+      try {
+        const resp = await fetch('/subscribe', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ email, lang: currentLang })
+        });
+
+        if (resp.status === 200) {
+          feedback.textContent = m.success;
+          feedback.classList.add('success');
+          input.value    = '';
+          input.disabled = true;
+        } else if (resp.status === 409) {
+          feedback.textContent = m.duplicate;
+          feedback.classList.add('error');
+          btn.disabled = false;
+        } else {
+          feedback.textContent = m.error;
+          feedback.classList.add('error');
+          btn.disabled = false;
+        }
+      } catch (e) {
+        feedback.textContent = m.error;
+        feedback.classList.add('error');
+        btn.disabled = false;
+      }
+    }
+
+    /* ── PARALLAX ORBS ── */
+    document.addEventListener('mousemove', e => {
+      const x = e.clientX / window.innerWidth;
+      const y = e.clientY / window.innerHeight;
+      document.querySelector('.orb1').style.transform = `translate(${x*30}px,${y*30}px)`;
+      document.querySelector('.orb2').style.transform = `translate(${-x*30}px,${-y*30}px)`;
+    });
+  </script>
+</body>
+</html>

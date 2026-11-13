@@ -1,0 +1,55 @@
+name: yt-dlp
+slug: yt-dlp
+version: "1.2"
+description: "Télécharge des vidéos et audio depuis YouTube et autres plateformes (yt-dlp)"
+image: hiveflows/yt-dlp:latest
+type: backend
+ingress: none
+port: 8080
+
+resources:
+  memory: 512m
+  cpus: "1.0"
+
+mounts:
+  - host: "."
+    container: "/workspace"
+    description: "Workspace data — fichiers écrits ici sont accessibles dans le workspace"
+
+tools:
+  - name: download_video
+    description: >
+      Download a video from YouTube or any yt-dlp-supported platform (Vimeo, Twitter/X,
+      Dailymotion, etc.). Returns a task_id immediately — the download runs in the background.
+      Always produces: video (mp4) + audio (mp3 via ffmpeg) + transcript if auto-captions are
+      available (vtt + markdown). Use get_download_result with the task_id to check progress
+      and retrieve file paths when done.
+    endpoint: /download
+    method: POST
+    schema:
+      url:
+        type: string
+        required: true
+        description: "Video URL to download"
+      quality:
+        type: string
+        default: "best"
+        description: "Video quality: best, 1080p, 720p, 480p, 360p"
+
+  - name: get_download_result
+    description: >
+      Poll the result of a download started with download_video. Pass the task_id returned
+      by download_video. Returns status ('pending', 'running', 'success', 'error') and,
+      when done, the file paths (video_path, audio_path, transcript_path, output_dir).
+      Call repeatedly every few seconds until status is 'success' or 'error'.
+      On success: video_path (mp4), audio_path (mp3), transcript_vtt_paths (list),
+      transcript_md_path (markdown), output_dir, metadata_path, title, slug.
+    endpoint: /result
+    method: GET
+    schema:
+      task_id:
+        type: string
+        required: true
+        description: "task_id returned by download_video"
+
+icon: mdi-download-circle

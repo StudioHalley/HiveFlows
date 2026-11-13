@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+
+{% block title %}Fichiers — {{ workspace.name }}{% endblock %}
+{% block page_title %}{{ workspace.name }}{% endblock %}
+{% block page_subtitle %}// file manager{% endblock %}
+
+{% set active_page = 'files' %}
+
+{% block head %}
+  <link rel="stylesheet" href="/static/atom-one-dark.min.css"/>
+  <script src="{{ static_v('highlight.min.js') }}"></script>
+  <script src="{{ static_v('marked.min.js') }}"></script>
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/w/{{ workspace.slug }}/chat" class="btn btn-ghost btn-sm">◈ Chat</a>
+  <a href="/dashboard/workspaces/{{ workspace.slug }}/manage" class="btn btn-ghost btn-sm">⚙ Gérer</a>
+{% endblock %}
+
+{% block content %}
+<div class="fm-container" id="fm-root"
+  data-slug="{{ workspace.slug }}"
+  data-workspace-id="{{ workspace.id }}"
+  data-can-write="{{ 'true' if can_write else 'false' }}">
+
+  <!-- ── TOOLBAR ── -->
+  <div class="fm-toolbar">
+    <div class="fm-breadcrumb" id="fm-breadcrumb">
+      <span class="fm-crumb active" data-path="." style="cursor:pointer;"><i class="mdi mdi-home"></i> root</span>
+    </div>
+    <div class="fm-toolbar-actions" id="fm-toolbar-actions">
+      {% if can_write %}
+      <button class="btn btn-ghost btn-sm" onclick="FM.mkdirPrompt()" title="Nouveau dossier"><i class="mdi mdi-folder-plus"></i> Dossier</button>
+      <button class="btn btn-ghost btn-sm" onclick="FM.newFilePrompt()" title="Nouveau fichier vide"><i class="mdi mdi-file-plus-outline"></i> Fichier</button>
+      <button class="btn btn-primary btn-sm" onclick="FM.triggerUpload()" title="Uploader des fichiers"><i class="mdi mdi-upload"></i> Upload</button>
+      <input type="file" id="fm-upload-input" multiple style="display:none" onchange="FM.uploadFromInput(this)"/>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── FILE LIST ── -->
+  <div class="fm-body">
+    <div class="fm-list-wrapper">
+      <table class="fm-table" id="fm-table">
+        <thead>
+          <tr>
+            <th style="width:32px;"></th>
+            <th>Nom</th>
+            <th style="width:100px;">Taille</th>
+            <th style="width:160px;">Modifié</th>
+            <th style="width:120px;"></th>
+          </tr>
+        </thead>
+        <tbody id="fm-tbody">
+          <tr><td colspan="5" class="fm-loading">Chargement…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── DROPZONE ── -->
+    {% if can_write %}
+    <div class="fm-dropzone" id="fm-dropzone">
+      <div class="fm-dropzone-inner">
+        <i class="mdi mdi-cloud-upload-outline"></i>
+        <div>Glisser des fichiers ici pour les uploader</div>
+        <div style="font-size:0.72rem; color:var(--text-dim); margin-top:4px;">Max 50 Mo par fichier</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── SELECTION BAR ── -->
+  <div class="fm-selection-bar" id="fm-selection-bar" style="display:none;">
+    <span id="fm-selection-count">0 élément(s) sélectionné(s)</span>
+    <div class="flex" style="gap:8px;">
+      {% if can_write %}
+      <button class="btn btn-danger btn-sm" onclick="FM.deleteSelected()"><i class="mdi mdi-delete-outline"></i> Supprimer</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- ── DRAG OVERLAY ── -->
+{% if can_write %}
+<div class="fm-drag-overlay" id="fm-drag-overlay">
+  <div class="fm-drag-overlay-content">
+    <i class="mdi mdi-cloud-upload-outline"></i>
+    <div style="font-size:1.2rem; font-family:'Orbitron',monospace;">Déposer les fichiers</div>
+    <div style="color:var(--text-dim); margin-top:8px;">Relâchez pour uploader dans le répertoire courant</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── UPLOAD PROGRESS ── -->
+<div class="fm-progress-overlay" id="fm-progress-overlay" style="display:none;">
+  <div class="fm-progress-box">
+    <div class="fm-progress-title" id="fm-progress-title">Upload en cours…</div>
+    <div class="fm-progress-bar-wrap">
+      <div class="fm-progress-bar" id="fm-progress-bar" style="width:0%"></div>
+    </div>
+    <div class="fm-progress-pct" id="fm-progress-pct">0%</div>
+    <div class="fm-progress-files" id="fm-progress-files"></div>
+  </div>
+</div>
+
+<!-- ── VIEWER MODAL ── -->
+<div class="fm-modal" id="fm-viewer-modal" style="display:none;">
+  <div class="fm-modal-backdrop" onclick="FM.closeViewer()"></div>
+  <div class="fm-modal-content fm-viewer-content">
+    <div class="fm-modal-header">
+      <div class="fm-modal-title" id="fm-viewer-title">Fichier</div>
+      <div class="flex" style="gap:8px; align-items:center;">
+        <span class="mono dim" id="fm-viewer-size" style="font-size:0.72rem;"></span>
+        {% if can_write %}
+        <button class="btn btn-ghost btn-sm" id="fm-viewer-edit-btn" onclick="FM.openEditor()" style="display:none;"><i class="mdi mdi-pencil"></i> Editer</button>
+        {% endif %}
+        <button class="btn btn-ghost btn-sm" id="fm-viewer-tools-btn" onclick="FM.openViewerToolMenu(this)" style="display:none;" title="Outils"><i class="mdi mdi-dots-horizontal"></i> Outils</button>
+        <a class="btn btn-ghost btn-sm" id="fm-viewer-download-btn" target="_blank"><i class="mdi mdi-download"></i> Télécharger</a>
+        <button class="btn btn-ghost btn-sm" onclick="FM.closeViewer()"><i class="mdi mdi-close"></i></button>
+      </div>
+    </div>
+    <div class="fm-modal-body" id="fm-viewer-body">
+      <div class="fm-loading">Chargement…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDITOR MODAL ── -->
+<div class="fm-modal" id="fm-editor-modal" style="display:none;">
+  <div class="fm-modal-backdrop" onclick="FM.confirmCloseEditor()"></div>
+  <div class="fm-modal-content fm-editor-content">
+    <div class="fm-modal-header">
+      <div class="fm-modal-title" id="fm-editor-title">Editeur</div>
+      <div class="flex" style="gap:8px; align-items:center;">
+        <span class="fm-dirty-indicator" id="fm-dirty" style="display:none; color:var(--purple);">● non sauvegardé</span>
+        <button class="btn btn-primary btn-sm" onclick="FM.saveFile()" id="fm-save-btn"><i class="mdi mdi-content-save"></i> Sauvegarder</button>
+        <button class="btn btn-ghost btn-sm" onclick="FM.confirmCloseEditor()"><i class="mdi mdi-close"></i></button>
+      </div>
+    </div>
+    <div class="fm-editor-body">
+      <textarea class="fm-editor-textarea" id="fm-editor-ta" spellcheck="false"
+        oninput="FM.markDirty()" onkeydown="FM.editorKeydown(event)"></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- ── RENAME MODAL ── -->
+<div class="fm-modal" id="fm-rename-modal" style="display:none;">
+  <div class="fm-modal-backdrop" onclick="FM.closeRename()"></div>
+  <div class="fm-modal-content" style="max-width:420px;">
+    <div class="fm-modal-header">
+      <div class="fm-modal-title">Renommer</div>
+      <button class="btn btn-ghost btn-sm" onclick="FM.closeRename()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="fm-modal-body" style="padding:20px;">
+      <label class="form-label">Nouveau nom</label>
+      <input type="text" class="form-input" id="fm-rename-input" style="width:100%; margin-top:8px;"
+        onkeydown="if(event.key==='Enter') FM.submitRename()"/>
+      <div class="flex" style="gap:8px; margin-top:16px; justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" onclick="FM.closeRename()">Annuler</button>
+        <button class="btn btn-primary btn-sm" onclick="FM.submitRename()">Renommer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MKDIR MODAL ── -->
+<div class="fm-modal" id="fm-mkdir-modal" style="display:none;">
+  <div class="fm-modal-backdrop" onclick="FM.closeMkdir()"></div>
+  <div class="fm-modal-content" style="max-width:420px;">
+    <div class="fm-modal-header">
+      <div class="fm-modal-title"><i class="mdi mdi-folder-plus"></i> Nouveau dossier</div>
+      <button class="btn btn-ghost btn-sm" onclick="FM.closeMkdir()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="fm-modal-body" style="padding:20px;">
+      <label class="form-label">Nom du dossier</label>
+      <input type="text" class="form-input" id="fm-mkdir-input" style="width:100%; margin-top:8px;"
+        placeholder="mon-dossier"
+        onkeydown="if(event.key==='Enter') FM.submitMkdir()"/>
+      <div class="flex" style="gap:8px; margin-top:16px; justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" onclick="FM.closeMkdir()">Annuler</button>
+        <button class="btn btn-primary btn-sm" onclick="FM.submitMkdir()">Créer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── NEW FILE MODAL ── -->
+<div class="fm-modal" id="fm-newfile-modal" style="display:none;">
+  <div class="fm-modal-backdrop" onclick="FM.closeNewFile()"></div>
+  <div class="fm-modal-content" style="max-width:420px;">
+    <div class="fm-modal-header">
+      <div class="fm-modal-title"><i class="mdi mdi-file-plus-outline"></i> Nouveau fichier</div>
+      <button class="btn btn-ghost btn-sm" onclick="FM.closeNewFile()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="fm-modal-body" style="padding:20px;">
+      <label class="form-label">Nom du fichier</label>
+      <input type="text" class="form-input" id="fm-newfile-input" style="width:100%; margin-top:8px;"
+        placeholder="fichier.txt"
+        onkeydown="if(event.key==='Enter') FM.submitNewFile()"/>
+      <div class="flex" style="gap:8px; margin-top:16px; justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" onclick="FM.closeNewFile()">Annuler</button>
+        <button class="btn btn-primary btn-sm" onclick="FM.submitNewFile()">Créer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MOVE MODAL ── -->
+<div class="fm-modal" id="fm-move-modal" style="display:none;">
+  <div class="fm-modal-backdrop" onclick="FM.closeMove()"></div>
+  <div class="fm-modal-content" style="max-width:460px;">
+    <div class="fm-modal-header">
+      <div class="fm-modal-title"><i class="mdi mdi-folder-move-outline"></i> Déplacer</div>
+      <button class="btn btn-ghost btn-sm" onclick="FM.closeMove()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="fm-modal-body" style="padding:20px;">
+      <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:8px;">
+        Fichier : <span class="mono" id="fm-move-filename" style="color:var(--cyan);"></span>
+      </div>
+      <div class="fm-move-dest-info">
+        Destination : <span id="fm-move-dest-display">/ (racine)</span>
+      </div>
+      <div class="fm-tree" id="fm-move-tree"></div>
+      <div class="flex" style="gap:8px; margin-top:16px; justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" onclick="FM.closeMove()">Annuler</button>
+        <button class="btn btn-primary btn-sm" onclick="FM.submitMove()"><i class="mdi mdi-folder-move-outline"></i> Déplacer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="fm-toast" id="fm-toast" style="display:none;"></div>
+
+<!-- ── TOOL INLINE POPOVER (D15) ── -->
+<div class="fm-tool-popover" id="fm-tool-popover" style="display:none;">
+  <div class="fm-tool-popover-header">
+    <span class="fm-tool-popover-title" id="fm-tool-popover-title">Outil</span>
+    <button class="fm-tool-popover-close" onclick="FM.closeToolPopover()"><i class="mdi mdi-close"></i></button>
+  </div>
+  <div class="fm-tool-popover-desc" id="fm-tool-popover-desc"></div>
+  <div class="fm-tool-popover-body" id="fm-tool-popover-body"></div>
+  <div class="fm-tool-popover-footer">
+    <button class="btn btn-ghost btn-sm" onclick="FM.closeToolPopover()">Annuler</button>
+    <button class="btn btn-primary btn-sm" id="fm-tool-popover-launch" onclick="FM.launchFromPopover()">
+      <i class="mdi mdi-play"></i> Lancer
+    </button>
+  </div>
+</div>
+
+<!-- ── FABRIC RUN MODAL (D16-D18) ── -->
+<div class="fm-modal" id="fm-fabric-modal" style="display:none;">
+  <div class="fm-modal-backdrop" onclick="FM.closeFabricModal()"></div>
+  <div class="fm-modal-content" style="max-width:620px;">
+    <div class="fm-modal-header">
+      <div class="fm-modal-title"><i class="mdi mdi-flash" style="color:var(--cyan);"></i> Fabric — Choisir un pattern</div>
+      <button class="btn btn-ghost btn-sm" onclick="FM.closeFabricModal()"><i class="mdi mdi-close"></i></button>
+    </div>
+    <div class="fm-modal-body" style="padding:20px; display:flex; flex-direction:column; gap:16px;">
+      <!-- Pattern autocomplete (D17) -->
+      <div>
+        <label class="form-label">Pattern <span style="color:var(--text-dim);font-size:0.72rem;">— recherche fuzzy</span></label>
+        <div class="fm-autocomplete" id="fm-fabric-autocomplete">
+          <input type="text" class="form-input fm-autocomplete-input" id="fm-fabric-pattern-input"
+            placeholder="ex: extract_wisdom, summarize, analyze_claims…"
+            autocomplete="off"
+            oninput="FM.fabricPatternFilter(this.value)"
+            onkeydown="FM.fabricPatternKeydown(event)" />
+          <div class="fm-autocomplete-dropdown" id="fm-fabric-pattern-dropdown" style="display:none;"></div>
+        </div>
+      </div>
+      <!-- Agent select -->
+      <div>
+        <label class="form-label">Agent</label>
+        <select class="form-input" id="fm-fabric-agent" style="width:100%;">
+          <option value="">Chargement…</option>
+        </select>
+      </div>
+      <!-- Output file -->
+      <div>
+        <label class="form-label">Fichier de sortie <span style="color:var(--text-dim);font-size:0.72rem;">— laisser vide pour auto</span></label>
+        <input type="text" class="form-input" id="fm-fabric-output" placeholder=".hive/outputs/fichier.pattern.md" style="width:100%;"/>
+      </div>
+      <!-- System prompt preview -->
+      <div id="fm-fabric-preview-wrap" style="display:none;">
+        <label class="form-label">Aperçu du system prompt</label>
+        <div class="fm-fabric-preview" id="fm-fabric-preview"></div>
+      </div>
+    </div>
+    <div class="fm-modal-footer">
+      <span class="fm-fabric-selected" id="fm-fabric-selected-label" style="color:var(--text-dim);font-size:0.78rem;"></span>
+      <div class="flex" style="gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="FM.closeFabricModal()">Annuler</button>
+        <button class="btn btn-primary btn-sm" id="fm-fabric-launch-btn" onclick="FM.launchFabric()" disabled>
+          <i class="mdi mdi-flash"></i> Lancer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ static_v('js/file-manager.js') }}"></script>
+<script>
+  FM.init('{{ workspace.slug }}', {{ 'true' if can_write else 'false' }}, '{{ workspace.id }}');
+</script>
+{% endblock %}

@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}{{ workspace.name }} — Gestion{% endblock %}
+{% block page_title %}{{ workspace.name }}{% endblock %}
+{% block page_subtitle %}// gestion du workspace{% endblock %}
+
+{% set active_page = 'workspaces' %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/workspaces" class="btn btn-ghost btn-sm">← Retour</a>
+  <a href="/dashboard/w/{{ workspace.slug }}/files" class="btn btn-ghost btn-sm">◫ Fichiers</a>
+  <a href="/dashboard/w/{{ workspace.slug }}/chat" class="btn btn-primary btn-sm">Ouvrir le chat</a>
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+  <div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+<!-- INFORMATIONS -->
+<div class="card mb-16">
+  <div class="card-header">
+    <div class="card-title">Informations</div>
+  </div>
+  <div class="card-body">
+    {% if user_role in ('owner', 'admin') %}
+    <form method="post" action="/dashboard/workspaces/{{ workspace.slug }}/edit">
+      <div class="mb-16">
+        <label class="form-label">Nom</label>
+        <input type="text" name="name" value="{{ workspace.name }}" required class="form-input" style="max-width: 400px;" />
+      </div>
+      <div class="mb-16">
+        <label class="form-label">Slug</label>
+        <div class="mono dim" style="font-size: 0.82rem; padding: 6px 0;">{{ workspace.slug }}</div>
+      </div>
+      <div class="mb-16">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-input" rows="3" style="max-width: 400px;">{{ workspace.description or '' }}</textarea>
+      </div>
+      <div style="color: var(--text-dim); font-size: 0.72rem; margin-bottom: 12px;">
+        Créé le {{ workspace.created_at.strftime('%Y-%m-%d %H:%M') }}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Sauvegarder</button>
+    </form>
+    {% else %}
+    <div class="mb-16">
+      <span class="mono dim">Slug :</span> <span class="mono">{{ workspace.slug }}</span>
+    </div>
+    <div class="mb-16">
+      <span class="mono dim">Description :</span> {{ workspace.description or "—" }}
+    </div>
+    <div>
+      <span class="mono dim">Créé le :</span> {{ workspace.created_at.strftime('%Y-%m-%d %H:%M') }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- MEMBRES -->
+<div class="card mb-16">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="card-title">Membres ({{ members | length }})</div>
+    {% if user_role in ('owner', 'admin') %}
+    <button onclick="document.getElementById('invite-form').style.display = document.getElementById('invite-form').style.display === 'none' ? 'block' : 'none'"
+            class="btn btn-primary btn-sm">+ Inviter</button>
+    {% endif %}
+  </div>
+
+  {% if user_role in ('owner', 'admin') %}
+  <div id="invite-form" style="display: none; padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+    <form method="post" action="/dashboard/workspaces/{{ workspace.slug }}/invite" class="flex" style="gap: 8px; align-items: flex-end;">
+      <div style="flex: 1;">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" required class="form-input" placeholder="collegue@example.com" />
+      </div>
+      <div>
+        <label class="form-label">Rôle</label>
+        <select name="role" class="form-input">
+          <option value="member">member</option>
+          <option value="admin">admin</option>
+          <option value="viewer">viewer</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Inviter</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card-body" style="padding: 0;">
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.7rem; color: var(--text-dim);">
+          <th style="text-align: left; padding: 10px 16px;">Nom</th>
+          <th style="text-align: left; padding: 10px 16px;">Email</th>
+          <th style="text-align: left; padding: 10px 16px;">Rôle</th>
+          {% if user_role in ('owner', 'admin') %}<th style="text-align: right; padding: 10px 16px;">Actions</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+          <td style="padding: 10px 16px;">{{ m.display_name }}</td>
+          <td style="padding: 10px 16px; color: var(--text-dim);">{{ m.email }}</td>
+          <td style="padding: 10px 16px;">
+            <span class="badge badge-active">{{ m.role }}</span>
+          </td>
+          {% if user_role in ('owner', 'admin') %}
+          <td style="padding: 10px 16px; text-align: right;">
+            {% if m.role != 'owner' %}
+              <form method="post" action="/dashboard/workspaces/{{ workspace.slug }}/members/{{ m.user_id }}/remove"
+                    style="display: inline;" data-confirm="Retirer {{ m.display_name }} ?">
+                <button type="submit" class="btn btn-danger btn-sm">Retirer</button>
+              </form>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- CLÉS API -->
+{% if user_role in ('owner', 'admin') %}
+<div class="card">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <div class="card-title">Clés API ({{ api_keys | length }})</div>
+    <button onclick="document.getElementById('apikey-form').style.display = document.getElementById('apikey-form').style.display === 'none' ? 'block' : 'none'"
+            class="btn btn-primary btn-sm">+ Générer</button>
+  </div>
+
+  {% if new_key %}
+  <div style="padding: 16px; background: rgba(0,200,100,0.08); border-bottom: 1px solid rgba(0,200,100,0.2);">
+    <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px;">Nouvelle clé générée — copiez-la maintenant, elle ne sera plus affichée :</div>
+    <code style="font-size: 0.85rem; word-break: break-all; user-select: all;">{{ new_key }}</code>
+  </div>
+  {% endif %}
+
+  <div id="apikey-form" style="display: none; padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+    <form method="post" action="/dashboard/workspaces/{{ workspace.slug }}/api-keys/create" class="flex" style="gap: 8px; align-items: flex-end;">
+      <div style="flex: 1;">
+        <label class="form-label">Nom</label>
+        <input type="text" name="name" required class="form-input" placeholder="ex: CI/CD Pipeline" />
+      </div>
+      <div>
+        <label class="form-label">Permissions</label>
+        <div style="display: flex; gap: 8px; padding-top: 4px;">
+          <label style="font-size: 0.75rem;"><input type="checkbox" name="permissions" value="chat" checked> chat</label>
+          <label style="font-size: 0.75rem;"><input type="checkbox" name="permissions" value="tasks" checked> tasks</label>
+          <label style="font-size: 0.75rem;"><input type="checkbox" name="permissions" value="agents" checked> agents</label>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Générer</button>
+    </form>
+  </div>
+
+  <div class="card-body" style="padding: 0;">
+    {% if api_keys %}
+    <table style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 0.7rem; color: var(--text-dim);">
+          <th style="text-align: left; padding: 10px 16px;">Nom</th>
+          <th style="text-align: left; padding: 10px 16px;">Préfixe</th>
+          <th style="text-align: left; padding: 10px 16px;">Permissions</th>
+          <th style="text-align: left; padding: 10px 16px;">Dernière utilisation</th>
+          <th style="text-align: left; padding: 10px 16px;">Créée le</th>
+          <th style="text-align: right; padding: 10px 16px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for k in api_keys %}
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+          <td style="padding: 10px 16px;">{{ k.name }}</td>
+          <td style="padding: 10px 16px;"><code>{{ k.key_prefix }}...</code></td>
+          <td style="padding: 10px 16px; font-size: 0.75rem; color: var(--text-dim);">{{ k.permissions | join(', ') }}</td>
+          <td style="padding: 10px 16px; color: var(--text-dim);">{{ k.last_used_at.strftime('%Y-%m-%d %H:%M') if k.last_used_at else '—' }}</td>
+          <td style="padding: 10px 16px; color: var(--text-dim);">{{ k.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td style="padding: 10px 16px; text-align: right;">
+            <form method="post" action="/dashboard/workspaces/{{ workspace.slug }}/api-keys/{{ k.id }}/revoke"
+                  style="display: inline;" data-confirm="Révoquer cette clé API ?">
+              <button type="submit" class="btn btn-danger btn-sm">Révoquer</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 24px; text-align: center; color: var(--text-dim); font-size: 0.8rem;">
+      Aucune clé API. Cliquez sur "+ Générer" pour en créer une.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

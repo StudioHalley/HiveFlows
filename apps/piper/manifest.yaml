@@ -1,0 +1,97 @@
+name: piper
+slug: piper
+version: "1.0"
+description: "Text-to-Speech (TTS) avec Piper — synthèse vocale rapide sur CPU, voix FR/EN haute qualité"
+image: hiveflows/piper:latest
+type: backend
+ingress: none
+port: 8080
+
+resources:
+  memory: 512m
+  cpus: "1.0"
+
+mounts:
+  - host: ".hive/piper/voices"
+    container: "/voices"
+    description: "Voix ONNX Piper — read-only"
+    readonly: true
+  - host: "."
+    container: "/workspace"
+    description: "Workspace data — fichiers audio générés écrits ici"
+
+tools:
+  - name: speak
+    description: >
+      Convertit du texte inline en fichier audio (TTS) avec Piper.
+      Retourne un task_id immédiatement — la synthèse tourne en arrière-plan.
+      Utiliser get_speak_result avec le task_id pour récupérer le chemin du fichier audio quand prêt.
+      L'audio est généré dans /workspace/tts/<task_id>.wav (ou .mp3).
+    endpoint: /speak
+    method: POST
+    schema:
+      text:
+        type: string
+        required: true
+        description: "Texte à synthétiser"
+      voice:
+        type: string
+        default: "fr_FR-siwis-medium"
+        description: "Nom de la voix (ex: fr_FR-siwis-medium, en_US-lessac-medium). Utiliser list_voices pour voir les voix disponibles."
+      format:
+        type: string
+        default: "wav"
+        description: "Format de sortie: wav (défaut) ou mp3"
+      speed:
+        type: number
+        default: 1.0
+        description: "Vitesse de parole (0.5 = lent, 1.0 = normal, 2.0 = rapide)"
+
+  - name: speak_file
+    description: >
+      Lit un fichier texte (.txt ou .md) et génère l'audio correspondant (TTS).
+      L'audio est écrit dans le même répertoire que le fichier source.
+      Retourne un task_id immédiatement — utiliser get_speak_result pour attendre le résultat.
+    endpoint: /speak/file
+    method: POST
+    schema:
+      text_path:
+        type: string
+        required: true
+        description: "Chemin absolu du fichier texte à lire (ex: /workspace/notes/article.txt)"
+      voice:
+        type: string
+        default: "fr_FR-siwis-medium"
+        description: "Nom de la voix à utiliser"
+      format:
+        type: string
+        default: "wav"
+        description: "Format de sortie: wav ou mp3"
+      speed:
+        type: number
+        default: 1.0
+        description: "Vitesse de parole"
+
+  - name: get_speak_result
+    description: >
+      Vérifie le résultat d'une synthèse lancée avec speak ou speak_file.
+      Retourne status ('pending', 'running', 'success', 'error') et, quand terminé,
+      le chemin du fichier audio généré (audio_path) et la durée de traitement.
+      Appeler toutes les 2-3 secondes jusqu'à status 'success' ou 'error'.
+    endpoint: /result
+    method: GET
+    schema:
+      task_id:
+        type: string
+        required: true
+        description: "task_id retourné par speak ou speak_file"
+
+  - name: list_voices
+    description: >
+      Liste les voix Piper disponibles dans ce workspace.
+      Retourne nom, langue et chemin de chaque voix installée.
+    endpoint: /voices
+    method: GET
+    schema: {}
+
+icon: mdi-account-voice

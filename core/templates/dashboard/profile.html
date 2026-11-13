@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Profil{% endblock %}
+{% block page_title %}Profil{% endblock %}
+{% block page_subtitle %}// {{ user.email }}{% endblock %}
+
+{% set active_page = 'profile' %}
+
+{% block content %}
+
+{% if flash %}
+  <div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+<div class="grid-2">
+  <!-- INFORMATIONS -->
+  <div class="card">
+    <div class="card-title">Informations</div>
+    <form method="post" action="/dashboard/profile">
+      <div class="form-group">
+        <label class="form-label">Nom d'affichage</label>
+        <input class="form-input" name="display_name" value="{{ user.display_name }}" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" name="email" type="email" value="{{ user.email }}" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Membre depuis</label>
+        <div class="mono dim" style="font-size: 0.82rem;">{{ user.created_at.strftime('%d %b %Y') }}</div>
+      </div>
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+    </form>
+  </div>
+
+  <!-- MOT DE PASSE -->
+  <div class="card">
+    <div class="card-title">Mot de passe</div>
+    {% if user.hashed_password %}
+    <form method="post" action="/dashboard/profile/password">
+      <div class="form-group">
+        <label class="form-label">Mot de passe actuel</label>
+        <input class="form-input" name="current_password" type="password" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nouveau mot de passe</label>
+        <input class="form-input" name="new_password" type="password" required minlength="6" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirmer</label>
+        <input class="form-input" name="confirm_password" type="password" required minlength="6" />
+      </div>
+      <button type="submit" class="btn btn-ghost">Changer le mot de passe</button>
+    </form>
+    {% else %}
+    <p class="mono dim" style="font-size: 0.82rem; margin-bottom: 16px;">
+      Compte OAuth uniquement. Definissez un mot de passe pour pouvoir aussi vous connecter par email.
+    </p>
+    <form method="post" action="/dashboard/profile/password">
+      <div class="form-group">
+        <label class="form-label">Nouveau mot de passe</label>
+        <input class="form-input" name="new_password" type="password" required minlength="6" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirmer</label>
+        <input class="form-input" name="confirm_password" type="password" required minlength="6" />
+      </div>
+      <button type="submit" class="btn btn-ghost">Definir un mot de passe</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- OAUTH -->
+<div class="card mt-24">
+  <div class="card-title">Comptes lies</div>
+  <div style="display: flex; flex-direction: column; gap: 16px;">
+    {% if user.oauth_provider %}
+    <div class="flex-between" style="padding: 12px 0; border-bottom: 1px solid var(--border);">
+      <div>
+        <span class="mono" style="font-size: 0.82rem; color: var(--text);">{{ user.oauth_provider | capitalize }}</span>
+        <span class="badge badge-active" style="margin-left: 8px;"><span class="badge-dot"></span>lie</span>
+      </div>
+      <form method="post" action="/dashboard/profile/oauth/unlink" style="margin: 0;">
+        <button type="submit" class="btn btn-danger btn-sm"
+                {% if not user.hashed_password %}disabled title="Definissez un mot de passe avant de delier OAuth"{% endif %}>
+          Delier
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% for provider in oauth_providers %}
+      {% if provider.name != user.oauth_provider %}
+      <div class="flex-between" style="padding: 12px 0; border-bottom: 1px solid var(--border);">
+        <div>
+          <span class="mono" style="font-size: 0.82rem; color: var(--text);">{{ provider.display_name }}</span>
+          <span class="badge badge-inactive" style="margin-left: 8px;">non lie</span>
+        </div>
+        <a href="/auth/oauth/{{ provider.name }}" class="btn btn-ghost btn-sm">Lier {{ provider.display_name }}</a>
+      </div>
+      {% endif %}
+    {% endfor %}
+
+    {% if not user.oauth_provider and not oauth_providers %}
+    <div class="mono dim" style="font-size: 0.78rem;">
+      Aucun provider OAuth configure sur cette instance.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

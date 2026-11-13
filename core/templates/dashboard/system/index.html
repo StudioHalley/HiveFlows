@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Système{% endblock %}
+{% block page_title %}Système{% endblock %}
+{% block page_subtitle %}// mise à jour de la plateforme{% endblock %}
+{% block breadcrumb_tail %}
+  <span class="breadcrumb-sep">/</span>
+  <span class="breadcrumb-item">système</span>
+{% endblock %}
+
+{% set active_page = 'system' %}
+
+{% block head %}
+<style>
+.ver-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; align-items: center; font-size: 0.82rem; }
+.ver-grid .k { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.7rem; }
+.ver-grid .v { font-family: 'Share Tech Mono', monospace; color: var(--cyan); }
+.log-term {
+  background: #02060a; border: 1px solid rgba(0,245,255,0.2); border-radius: 6px;
+  padding: 12px 14px; margin-top: 14px; height: 340px; overflow-y: auto;
+  font-family: 'Share Tech Mono', monospace; font-size: 0.74rem; line-height: 1.55;
+  color: var(--text); white-space: pre-wrap; word-break: break-word;
+}
+.log-term:empty::before { content: 'En attente…'; color: var(--text-dim); }
+.pill { font-size: 0.68rem; padding: 2px 9px; border-radius: 999px; border: 1px solid; }
+.pill-ok { color: var(--green); border-color: rgba(0,255,140,0.4); }
+.pill-warn { color: var(--amber, #ffb000); border-color: rgba(255,176,0,0.4); }
+.pill-err { color: #ff5470; border-color: rgba(255,84,112,0.4); }
+.pill-dim { color: var(--text-dim); border-color: rgba(255,255,255,0.15); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="card mb-24">
+  <div class="card-header">
+    <div class="card-title">Version</div>
+    <button class="btn btn-ghost btn-sm" id="btn-refresh" onclick="loadVersion()"><i class="mdi mdi-refresh"></i> Vérifier</button>
+  </div>
+  <div class="card-body">
+    <div class="ver-grid" id="ver-grid">
+      <div class="k">État</div><div class="v" id="ver-state"><span class="pill pill-dim">chargement…</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Mise à jour</div>
+    <span class="mono dim" style="font-size:0.72rem;">git pull → rebuild core/worker → migrations</span>
+  </div>
+  <div class="card-body">
+    <p class="dim" style="font-size:0.82rem; line-height:1.6; margin-bottom:14px;">
+      Récupère la dernière version, reconstruit le core et les workers, applique les migrations puis
+      vérifie la santé. <strong>beekeeper n'est pas redémarré</strong> (il pilote la mise à jour).
+      Le core redémarre brièvement — cette page se reconnectera automatiquement.
+    </p>
+
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <button class="btn btn-primary" id="btn-update" onclick="startUpdate(false)">
+        <i class="mdi mdi-arrow-up-bold-circle-outline"></i> Mettre à jour
+      </button>
+      <label class="dim" style="font-size:0.74rem; display:flex; align-items:center; gap:6px;">
+        <input type="checkbox" id="chk-force"> forcer (rebuild même si à jour)
+      </label>
+      <span id="run-pill"></span>
+    </div>
+
+    <div class="log-term" id="log"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function loadVersion() {
+  const grid = $('ver-grid');
+  $('ver-state').innerHTML = '<span class="pill pill-dim">vérification…</span>';
+  try {
+    const r = await fetch('/dashboard/system/version');
+    const d = await r.json();
+    if (!d.available) {
+      grid.innerHTML = `<div class="k">État</div><div class="v"><span class="pill pill-dim">indisponible</span>
+        <span class="dim" style="font-size:0.74rem;">${d.reason || ''}</span></div>`;
+      $('btn-update').disabled = true;
+      return;
+    }
+    let statePill;
+    if (d.up_to_date === true) statePill = '<span class="pill pill-ok"><i class="mdi mdi-check"></i> à jour</span>';
+    else if (d.behind && d.behind > 0) statePill = `<span class="pill pill-warn">${d.behind} commit(s) en retard</span>`;
+    else statePill = '<span class="pill pill-dim">retard inconnu (hors-ligne ?)</span>';
+
+    grid.innerHTML = `
+      <div class="k">État</div><div class="v">${statePill}</div>
+      <div class="k">Branche</div><div class="v">${d.branch || '—'}</div>
+      <div class="k">Version locale</div><div class="v">${d.current || '—'}</div>
+      <div class="k">Dernier commit</div><div class="v" style="color:var(--text);">${(d.subject || '').replace(/</g,'&lt;')}</div>
+      ${d.remote ? `<div class="k">origin</div><div class="v">${d.remote}</div>` : ''}`;
+  } catch (e) {
+    $('ver-state').innerHTML = `<span class="pill pill-err">erreur</span> <span class="dim">${e}</span>`;
+  }
+}
+
+let es = null;
+let rendered = 0;            // nb de lignes déjà affichées (dédup sur l'index i)
+let updating = false;
+
+function appendLog(i, line) {
+  if (i >= 0 && i < rendered) return;       // déjà affiché (reconnexion)
+  const log = $('log');
+  log.textContent += (log.textContent ? '\n' : '') + line;
+  log.scrollTop = log.scrollHeight;
+  if (i >= 0) rendered = i + 1;
+}
+
+function openStream() {
+  if (es) es.close();
+  es = new EventSource('/dashboard/system/update/stream');
+  es.onmessage = (ev) => {
+    try { const d = JSON.parse(ev.data); appendLog(d.i, d.line); } catch (_) {}
+  };
+  es.addEventListener('done', (ev) => {
+    let d = {}; try { d = JSON.parse(ev.data); } catch (_) {}
+    finishUpdate(d.status, d.returncode);
+  });
+  es.onerror = () => {
+    // core redémarre probablement → EventSource va se reconnecter tout seul.
+    $('run-pill').innerHTML = '<span class="pill pill-warn">reconnexion…</span>';
+  };
+}
+
+function finishUpdate(status, rc) {
+  updating = false;
+  if (es) { es.close(); es = null; }
+  $('btn-update').disabled = false;
+  if (status === 'ok') {
+    $('run-pill').innerHTML = '<span class="pill pill-ok"><i class="mdi mdi-check"></i> terminé</span>';
+    setTimeout(loadVersion, 1500);
+  } else {
+    $('run-pill').innerHTML = `<span class="pill pill-err">échec (code ${rc})</span>`;
+  }
+}
+
+async function startUpdate(force) {
+  if (updating) return;
+  if (!confirm('Lancer la mise à jour de la plateforme ? Le core va redémarrer brièvement.')) return;
+  updating = true; rendered = 0;
+  $('log').textContent = '';
+  $('btn-update').disabled = true;
+  $('run-pill').innerHTML = '<span class="pill pill-warn">en cours…</span>';
+  try {
+    const r = await fetch('/dashboard/system/update', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ force: $('chk-force').checked }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      appendLog(-1, '[core] ' + (d.detail || ('erreur HTTP ' + r.status)));
+      finishUpdate('failed', r.status);
+      return;
+    }
+    openStream();
+  } catch (e) {
+    appendLog(-1, '[core] ' + e);
+    finishUpdate('failed', -1);
+  }
+}
+
+loadVersion();
+</script>
+{% endblock %}

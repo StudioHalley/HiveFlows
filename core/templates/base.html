@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}HiveFlows{% endblock %} — Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css"/>
+  <link rel="stylesheet" href="{{ static_v('style.css') }}"/>
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+
+  <div class="layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <a href="{% if workspace_slug %}/dashboard/w/{{ workspace_slug }}/{% else %}/dashboard{% endif %}" class="sidebar-logo">Hive<span>Flows</span></a>
+
+      {% if workspace_slug and all_workspaces %}
+      <div class="ws-selector">
+        <div class="sidebar-section">// workspace</div>
+        <div class="ws-selector-row">
+          <span style="color: var(--cyan); font-size: 0.9rem; flex-shrink: 0;">⬢</span>
+          <select onchange="window.location='/dashboard/w/'+this.value+'/'" class="ws-selector-select">
+            {% for ws in all_workspaces %}
+            <option value="{{ ws.slug }}" {% if ws.slug == workspace_slug %}selected{% endif %}>{{ ws.name }}{% if ws.role %} ({{ ws.role }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% endif %}
+
+      <nav class="sidebar-nav">
+        <div class="sidebar-section">// navigation</div>
+
+        {% if workspace_slug %}
+        <a href="/dashboard/w/{{ workspace_slug }}/" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+          <span class="nav-icon">⬡</span> Accueil
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/chat" class="nav-item {% if active_page == 'chat' %}active{% endif %}">
+          <span class="nav-icon">◈</span> Chat
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/files" class="nav-item {% if active_page == 'files' %}active{% endif %}">
+          <span class="nav-icon">◫</span> Fichiers
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/apps" class="nav-item {% if active_page == 'apps' %}active{% endif %}">
+          <span class="nav-icon">▣</span> Apps
+        </a>
+        <div id="sidebar-iframe-apps"></div>
+
+        <div class="sidebar-section">// config</div>
+
+        <a href="/dashboard/w/{{ workspace_slug }}/agents" class="nav-item {% if active_page == 'agents' %}active{% endif %}">
+          <span class="nav-icon">◇</span> Agents
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/providers" class="nav-item {% if active_page == 'providers' %}active{% endif %}">
+          <span class="nav-icon">⬡</span> Providers LLM
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/api-server" class="nav-item {% if active_page == 'api_server' %}active{% endif %}">
+          <span class="nav-icon">▥</span> API Server
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/activity" class="nav-item {% if active_page == 'activity' %}active{% endif %}">
+          <span class="nav-icon">▷</span> Activity
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/audit" class="nav-item {% if active_page == 'audit' %}active{% endif %}">
+          <span class="nav-icon">◉</span> Audit
+        </a>
+        <a href="/dashboard/w/{{ workspace_slug }}/portal/devices" class="nav-item {% if active_page == 'portal_devices' %}active{% endif %}">
+          <span class="nav-icon">⇄</span> Portal
+        </a>
+        {% else %}
+        <a href="/dashboard" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+          <span class="nav-icon">⬡</span> Accueil
+        </a>
+        {% endif %}
+
+        <div class="sidebar-section">// espaces</div>
+
+        <a href="/dashboard/workspaces" class="nav-item {% if active_page == 'workspaces' %}active{% endif %}">
+          <span class="nav-icon">⬢</span> Workspaces
+        </a>
+        <a href="/dashboard/system" class="nav-item {% if active_page == 'system' %}active{% endif %}">
+          <span class="nav-icon">⟳</span> Système
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div>v0.4.0 — Phase 4</div>
+        {% if user %}
+        <a href="/dashboard/profile" style="display:block;margin-top:8px;font-size:0.68rem;color:var(--cyan);text-decoration:none;font-family:'Share Tech Mono',monospace;" class="{% if active_page == 'profile' %}cyan{% endif %}">
+          ◉ {{ user.display_name }}
+        </a>
+        {% endif %}
+        <div class="mt-4" style="color: var(--green); text-shadow: 0 0 6px var(--green);">▶ ONLINE</div>
+        <form method="post" action="/dashboard/logout" style="margin-top: 10px;">
+          <button type="submit" style="background:none;border:none;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:0.62rem;color:var(--text-dim);letter-spacing:0.08em;padding:0;">
+            ⎋ Déconnexion
+          </button>
+        </form>
+      </div>
+    </aside>
+
+    <!-- MOBILE MENU TOGGLE -->
+    <button class="mobile-menu-btn" onclick="document.querySelector('.sidebar').classList.toggle('sidebar-open')">☰</button>
+
+    <!-- MAIN -->
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <div class="page-title">{% block page_title %}Dashboard{% endblock %}</div>
+          <div class="breadcrumbs">
+            <a href="/dashboard" class="breadcrumb-item">hiveflows</a>
+            {% if workspace_slug %}
+            <span class="breadcrumb-sep">/</span>
+            <a href="/dashboard/w/{{ workspace_slug }}/" class="breadcrumb-item">{{ workspace_slug }}</a>
+            {% endif %}
+            {% block breadcrumb_tail %}{% endblock %}
+          </div>
+        </div>
+        <div class="topbar-actions">
+          {% block topbar_actions %}{% endblock %}
+        </div>
+      </header>
+
+      <div class="{% block content_class %}content{% endblock %}">
+        {% block content %}{% endblock %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CONFIRM MODAL (global) ── -->
+  <div class="fm-modal" id="app-confirm-modal" style="display:none;">
+    <div class="fm-modal-backdrop" onclick="document.getElementById('app-confirm-cancel').click()"></div>
+    <div class="fm-modal-content" style="max-width:420px;">
+      <div class="fm-modal-header">
+        <div class="fm-modal-title">
+          <i class="mdi" id="app-confirm-icon" style="margin-right:8px;font-size:1.2rem;vertical-align:middle;"></i><span id="app-confirm-title">Confirmation</span>
+        </div>
+      </div>
+      <div class="fm-modal-body" style="padding:20px 24px;">
+        <p id="app-confirm-message" style="line-height:1.6; color:var(--text);"></p>
+        <div class="flex" style="gap:8px; margin-top:20px; justify-content:flex-end;">
+          <button class="btn btn-ghost btn-sm" id="app-confirm-cancel">
+            <i class="mdi mdi-close"></i> Annuler
+          </button>
+          <button class="btn btn-sm" id="app-confirm-ok">Confirmer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if workspace_slug %}
+  <script>
+  (async function loadSidebarApps() {
+    const slug = {{ workspace_slug | tojson }};
+    const container = document.getElementById('sidebar-iframe-apps');
+    if (!container) return;
+    try {
+      const resp = await fetch(`/dashboard/w/${slug}/apps/sidebar-apps`);
+      if (!resp.ok) return;
+      const apps = await resp.json();
+      if (!apps.length) return;
+      container.innerHTML = apps.map(app =>
+        `<a href="/dashboard/w/${slug}/apps?open=${app.slug}" class="nav-subitem" title="${app.name}">` +
+        `<i class="mdi ${app.icon || 'mdi-cube-outline'}"></i>` +
+        `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${app.name}</span>` +
+        `</a>`
+      ).join('');
+    } catch(e) {}
+  })();
+  </script>
+  {% endif %}
+
+  <script>
+  window.showConfirm = function(title, message, options) {
+    options = options || {};
+    return new Promise(function(resolve) {
+      var modal   = document.getElementById('app-confirm-modal');
+      var titleEl = document.getElementById('app-confirm-title');
+      var msgEl   = document.getElementById('app-confirm-message');
+      var okBtn   = document.getElementById('app-confirm-ok');
+      var cancelBtn = document.getElementById('app-confirm-cancel');
+      var iconEl  = document.getElementById('app-confirm-icon');
+
+      titleEl.textContent = title;
+      msgEl.textContent   = message;
+
+      if (options.danger) {
+        iconEl.className    = 'mdi mdi-alert-outline';
+        iconEl.style.color  = '#ff4466';
+        okBtn.className     = 'btn btn-danger btn-sm';
+      } else {
+        iconEl.className    = 'mdi mdi-help-circle-outline';
+        iconEl.style.color  = 'var(--cyan)';
+        okBtn.className     = 'btn btn-primary btn-sm';
+      }
+      okBtn.innerHTML = '<i class="mdi mdi-check"></i> ' + (options.confirmText || 'Confirmer');
+
+      modal.style.display = 'flex';
+      setTimeout(function() { okBtn.focus(); }, 50);
+
+      function cleanup(result) {
+        modal.style.display = 'none';
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      }
+      function onKey(e) {
+        if (e.key === 'Enter')  { e.preventDefault(); cleanup(true); }
+        if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+      }
+
+      okBtn.onclick     = function() { cleanup(true); };
+      cancelBtn.onclick = function() { cleanup(false); };
+      document.addEventListener('keydown', onKey);
+    });
+  };
+
+  // Intercept forms with data-confirm attribute
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    var msg  = form.dataset.confirm;
+    if (!msg) return;
+    e.preventDefault();
+    showConfirm('Confirmation', msg, { danger: true }).then(function(ok) {
+      if (ok) {
+        delete form.dataset.confirm;
+        form.submit();
+      }
+    });
+  });
+  </script>
+
+  <script>
+  (function() {
+    var layout = document.querySelector('.layout');
+    if (!layout) return;
+    if (localStorage.getItem('sidebar-hidden') === '1') layout.classList.add('sidebar-hidden');
+    document.addEventListener('keydown', function(e) {
+      if (e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey && e.key === 'b') {
+        e.preventDefault();
+        layout.classList.toggle('sidebar-hidden');
+        localStorage.setItem('sidebar-hidden', layout.classList.contains('sidebar-hidden') ? '1' : '0');
+      }
+    });
+  })();
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

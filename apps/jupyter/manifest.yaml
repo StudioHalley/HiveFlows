@@ -1,0 +1,32 @@
+name: Jupyter Lab
+slug: jupyter
+version: "1.0"
+description: "Environnement de notebooks interactifs"
+image: jupyter/scipy-notebook:latest
+type: persistent
+ingress: iframe
+port: 8888
+
+env:
+  - key: JUPYTER_TOKEN
+    description: "Token d'authentification Jupyter"
+    required: true
+    secret: true
+    default: ""
+
+mounts:
+  - host: ".hive/jupyter"
+    container: "/home/jovyan/work"
+    description: "Répertoire de notebooks"
+
+strip_prefix: false
+
+env_inject:
+  NOTEBOOK_ARGS: "--ServerApp.base_url={base_url}"
+
+resources:
+  memory: 1g
+  cpus: "1.0"
+  user: "1000:1000"
+
+icon: mdi-language-python

@@ -1,0 +1,262 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 850" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#030810"/>
+      <stop offset="100%" stop-color="#060d1a"/>
+    </linearGradient>
+    <radialGradient id="orb1" cx="0.1" cy="0.1" r="0.5">
+      <stop offset="0%" stop-color="#00f5ff" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb2" cx="0.9" cy="0.9" r="0.5">
+      <stop offset="0%" stop-color="#bf00ff" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#bf00ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="btn" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00f5ff"/>
+      <stop offset="100%" stop-color="#bf00ff"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="850" fill="url(#bg)"/>
+  <rect width="1400" height="850" fill="url(#orb1)"/>
+  <rect width="1400" height="850" fill="url(#orb2)"/>
+
+  <!-- Grid -->
+  <g stroke="rgba(0,245,255,0.04)" stroke-width="1">
+    <path d="M0 100 H1400 M0 200 H1400 M0 300 H1400 M0 400 H1400 M0 500 H1400 M0 600 H1400 M0 700 H1400 M0 800 H1400"/>
+    <path d="M100 0 V850 M200 0 V850 M300 0 V850 M400 0 V850 M500 0 V850 M600 0 V850 M700 0 V850 M800 0 V850 M900 0 V850 M1000 0 V850 M1100 0 V850 M1200 0 V850 M1300 0 V850"/>
+  </g>
+
+  <!-- Title -->
+  <text x="40" y="50" fill="#00f5ff" font-family="Orbitron" font-size="22" font-weight="700" filter="url(#glow)">HIVEFLOWS · Human Tool Registry</text>
+  <text x="40" y="75" fill="#4a6580" font-size="13">Preview — menu contextuel + modal Fabric</text>
+
+  <!-- ======================= LEFT: File Manager + Context Menu ======================= -->
+  <g transform="translate(40, 110)">
+    <!-- Panel frame -->
+    <rect width="520" height="680" rx="8" fill="#0a1628" stroke="rgba(0,245,255,0.12)"/>
+
+    <!-- Header -->
+    <rect width="520" height="44" rx="8" fill="#060d1a"/>
+    <rect y="36" width="520" height="8" fill="#060d1a"/>
+    <text x="20" y="28" fill="#00f5ff" font-size="13" font-weight="600" letter-spacing="1">
+      <tspan font-family="Share Tech Mono">▸ FILES / workspace_1 / notes</tspan>
+    </text>
+    <line x1="0" y1="44" x2="520" y2="44" stroke="rgba(0,245,255,0.12)"/>
+
+    <!-- File rows -->
+    <g transform="translate(0, 60)">
+      <!-- Row 1 -->
+      <g>
+        <rect width="520" height="34" fill="transparent"/>
+        <text x="20" y="22" fill="#c8d8e8" font-size="13">📁 research/</text>
+      </g>
+      <!-- Row 2 -->
+      <g transform="translate(0, 34)">
+        <rect width="520" height="34" fill="transparent"/>
+        <text x="20" y="22" fill="#c8d8e8" font-size="13">📁 drafts/</text>
+      </g>
+      <!-- Row 3 - SELECTED -->
+      <g transform="translate(0, 68)">
+        <rect width="520" height="34" fill="rgba(0,245,255,0.08)" stroke="rgba(0,245,255,0.4)" stroke-dasharray="2,2"/>
+        <text x="20" y="22" fill="#00f5ff" font-size="13" font-weight="600">📄 article-ia-2026.md</text>
+        <text x="440" y="22" fill="#4a6580" font-size="11">12 kb</text>
+      </g>
+      <!-- Row 4 -->
+      <g transform="translate(0, 102)">
+        <text x="20" y="22" fill="#c8d8e8" font-size="13">📄 interview-raw.txt</text>
+      </g>
+      <!-- Row 5 -->
+      <g transform="translate(0, 136)">
+        <text x="20" y="22" fill="#c8d8e8" font-size="13">📄 references.md</text>
+      </g>
+    </g>
+
+    <!-- Context Menu popup -->
+    <g transform="translate(160, 170)">
+      <!-- Shadow -->
+      <rect x="4" y="4" width="300" height="360" rx="6" fill="rgba(0,0,0,0.5)"/>
+      <!-- Body -->
+      <rect width="300" height="360" rx="6" fill="#0a1628" stroke="#00f5ff" stroke-width="1.5"/>
+
+      <!-- Section: Edition -->
+      <text x="16" y="26" fill="#4a6580" font-size="10" letter-spacing="2" font-family="Share Tech Mono">ÉDITION</text>
+      <g transform="translate(0, 38)">
+        <rect width="300" height="28" fill="transparent"/>
+        <text x="16" y="19" fill="#c8d8e8" font-size="12">✎ Renommer</text>
+      </g>
+      <g transform="translate(0, 66)">
+        <text x="16" y="19" fill="#c8d8e8" font-size="12">⧉ Dupliquer</text>
+      </g>
+      <g transform="translate(0, 94)">
+        <text x="16" y="19" fill="#c8d8e8" font-size="12">🗑 Supprimer</text>
+      </g>
+
+      <line x1="12" y1="130" x2="288" y2="130" stroke="rgba(0,245,255,0.12)"/>
+
+      <!-- Section: Tools Fabric -->
+      <text x="16" y="152" fill="#4a6580" font-size="10" letter-spacing="2" font-family="Share Tech Mono">FABRIC · ÉPINGLÉS</text>
+
+      <!-- Pinned tool 1 -->
+      <g transform="translate(0, 164)">
+        <rect width="300" height="30" fill="rgba(0,245,255,0.06)"/>
+        <text x="16" y="20" fill="#00f5ff" font-size="12" font-weight="600">✦ Extract Wisdom</text>
+        <text x="195" y="20" fill="#4a6580" font-size="10">⌘⇧W</text>
+      </g>
+      <g transform="translate(0, 194)">
+        <text x="16" y="20" fill="#c8d8e8" font-size="12">✦ Summarize</text>
+        <text x="195" y="20" fill="#4a6580" font-size="10">⌘⇧S</text>
+      </g>
+      <g transform="translate(0, 220)">
+        <text x="16" y="20" fill="#c8d8e8" font-size="12">✦ Extract References</text>
+      </g>
+
+      <line x1="12" y1="256" x2="288" y2="256" stroke="rgba(0,245,255,0.12)"/>
+
+      <!-- Generic fabric_run -->
+      <g transform="translate(0, 266)">
+        <rect width="300" height="32" fill="transparent"/>
+        <text x="16" y="21" fill="#bf00ff" font-size="12" font-weight="600">⚡ Fabric… (tous les patterns)</text>
+        <text x="275" y="21" fill="#4a6580" font-size="12">▸</text>
+      </g>
+
+      <line x1="12" y1="308" x2="288" y2="308" stroke="rgba(0,245,255,0.12)"/>
+
+      <!-- Autres outils -->
+      <g transform="translate(0, 318)">
+        <text x="16" y="20" fill="#c8d8e8" font-size="12">🌐 Traduire…</text>
+      </g>
+    </g>
+
+    <!-- Callout arrow to fabric_run -->
+    <g>
+      <path d="M 460 460 Q 530 460 560 440" stroke="#bf00ff" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+    </g>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#bf00ff"/>
+      </marker>
+    </defs>
+  </g>
+
+  <!-- ======================= RIGHT: Fabric_run Modal ======================= -->
+  <g transform="translate(600, 110)">
+    <!-- Modal frame -->
+    <rect width="760" height="680" rx="10" fill="#060d1a" stroke="#00f5ff" stroke-width="1.5"/>
+
+    <!-- Top gradient bar -->
+    <rect width="760" height="3" fill="url(#btn)"/>
+
+    <!-- Header -->
+    <g transform="translate(0, 20)">
+      <text x="28" y="20" fill="#00f5ff" font-family="Orbitron" font-size="17" font-weight="700">⚡ FABRIC</text>
+      <text x="28" y="44" fill="#4a6580" font-size="12">
+        Fichier cible : <tspan fill="#c8d8e8">article-ia-2026.md</tspan>
+      </text>
+      <text x="720" y="26" fill="#4a6580" font-size="20" text-anchor="end">✕</text>
+    </g>
+    <line x1="0" y1="82" x2="760" y2="82" stroke="rgba(0,245,255,0.12)"/>
+
+    <!-- Pattern field -->
+    <g transform="translate(28, 104)">
+      <text x="0" y="0" fill="#c8d8e8" font-size="12" font-weight="600">Pattern</text>
+      <text x="55" y="0" fill="#bf00ff" font-size="10">● requis</text>
+
+      <!-- Input -->
+      <rect x="0" y="14" width="704" height="44" rx="6" fill="#030810" stroke="#00f5ff" stroke-width="1"/>
+      <text x="16" y="42" fill="#4a6580" font-size="13" font-family="Share Tech Mono">🔍</text>
+      <text x="44" y="42" fill="#c8d8e8" font-size="14">extract</text>
+      <rect x="96" y="22" width="1" height="26" fill="#00f5ff">
+        <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+      </rect>
+
+      <!-- Dropdown -->
+      <rect x="0" y="66" width="704" height="290" rx="6" fill="#0a1628" stroke="rgba(0,245,255,0.4)"/>
+
+      <!-- Match group header -->
+      <text x="16" y="88" fill="#4a6580" font-size="10" font-family="Share Tech Mono" letter-spacing="2">12 RÉSULTATS · ↑↓ POUR NAVIGUER</text>
+
+      <!-- Option 1 selected -->
+      <g transform="translate(0, 98)">
+        <rect x="6" y="0" width="692" height="42" rx="4" fill="rgba(0,245,255,0.1)" stroke="rgba(0,245,255,0.4)"/>
+        <text x="20" y="18" fill="#00f5ff" font-size="13" font-weight="600">extract_wisdom</text>
+        <text x="20" y="34" fill="#4a6580" font-size="11">Extracts ideas, insights, quotes &amp; references from a text</text>
+        <text x="680" y="25" fill="#00ff88" font-size="10" text-anchor="end" font-family="Share Tech Mono">★ PINNED</text>
+      </g>
+
+      <!-- Option 2 -->
+      <g transform="translate(0, 146)">
+        <text x="20" y="18" fill="#c8d8e8" font-size="13">extract_references</text>
+        <text x="20" y="34" fill="#4a6580" font-size="11">Extract all academic/source references mentioned</text>
+        <text x="680" y="25" fill="#4a6580" font-size="10" text-anchor="end" font-family="Share Tech Mono">★ PINNED</text>
+      </g>
+
+      <!-- Option 3 -->
+      <g transform="translate(0, 190)">
+        <text x="20" y="18" fill="#c8d8e8" font-size="13">extract_insights</text>
+        <text x="20" y="34" fill="#4a6580" font-size="11">Pull out novel &amp; surprising insights from content</text>
+      </g>
+
+      <!-- Option 4 -->
+      <g transform="translate(0, 232)">
+        <text x="20" y="18" fill="#c8d8e8" font-size="13">extract_main_idea</text>
+        <text x="20" y="34" fill="#4a6580" font-size="11">Identify and articulate the central thesis</text>
+      </g>
+
+      <!-- Option 5 -->
+      <g transform="translate(0, 274)">
+        <text x="20" y="18" fill="#c8d8e8" font-size="13">extract_core_message</text>
+        <text x="20" y="34" fill="#4a6580" font-size="11">Strip to the single most important takeaway</text>
+      </g>
+
+      <!-- More indicator -->
+      <text x="352" y="348" fill="#4a6580" font-size="11" text-anchor="middle" font-family="Share Tech Mono">· · · 7 de plus · · ·</text>
+    </g>
+
+    <!-- Model field -->
+    <g transform="translate(28, 480)">
+      <text x="0" y="0" fill="#c8d8e8" font-size="12" font-weight="600">Modèle LLM</text>
+      <rect x="0" y="14" width="340" height="40" rx="6" fill="#030810" stroke="rgba(0,245,255,0.2)"/>
+      <text x="16" y="39" fill="#c8d8e8" font-size="13">openai/gpt-4o-mini</text>
+      <text x="320" y="39" fill="#00f5ff" font-size="12" text-anchor="end">▾</text>
+
+      <text x="364" y="0" fill="#c8d8e8" font-size="12" font-weight="600">Destination</text>
+      <rect x="364" y="14" width="340" height="40" rx="6" fill="#030810" stroke="rgba(0,245,255,0.2)"/>
+      <text x="380" y="39" fill="#c8d8e8" font-size="13">article-ia-2026.wisdom.md</text>
+      <text x="684" y="39" fill="#00f5ff" font-size="12" text-anchor="end">▾</text>
+    </g>
+
+    <!-- Preview pattern -->
+    <g transform="translate(28, 562)">
+      <rect x="0" y="0" width="704" height="56" rx="6" fill="rgba(0,245,255,0.04)" stroke="rgba(0,245,255,0.12)"/>
+      <text x="16" y="20" fill="#4a6580" font-size="10" font-family="Share Tech Mono" letter-spacing="2">PREVIEW DU SYSTEM PROMPT</text>
+      <text x="16" y="40" fill="#c8d8e8" font-size="11" font-family="Share Tech Mono">You extract surprising, insightful, and interesting information from text…</text>
+      <text x="684" y="40" fill="#00f5ff" font-size="11" text-anchor="end">voir plus ↗</text>
+    </g>
+
+    <!-- Footer / Actions -->
+    <line x1="0" y1="635" x2="760" y2="635" stroke="rgba(0,245,255,0.12)"/>
+    <g transform="translate(0, 648)">
+      <text x="28" y="16" fill="#4a6580" font-size="11">↵ Entrée pour lancer · Esc pour annuler</text>
+
+      <!-- Cancel -->
+      <rect x="520" y="0" width="90" height="30" rx="4" fill="transparent" stroke="rgba(0,245,255,0.3)"/>
+      <text x="565" y="20" fill="#c8d8e8" font-size="12" text-anchor="middle">Annuler</text>
+
+      <!-- Run -->
+      <rect x="620" y="0" width="112" height="30" rx="4" fill="url(#btn)"/>
+      <text x="676" y="20" fill="#030810" font-size="12" font-weight="700" text-anchor="middle">▶ Lancer</text>
+    </g>
+  </g>
+
+  <!-- Footer hint -->
+  <text x="700" y="825" fill="#4a6580" font-size="11" text-anchor="middle" font-family="Share Tech Mono">
+    ← menu contextuel sur clic-droit  ·  modal ouvert via « Fabric… » ou tool non-épinglé →
+  </text>
+</svg>

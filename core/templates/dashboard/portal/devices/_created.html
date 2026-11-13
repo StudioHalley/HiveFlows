@@ -1,0 +1,46 @@
+{# HTMX fragment — injected into #create-modal-body after successful device creation #}
+<div class="portal-modal-body" data-created="1" id="create-modal-body">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+    <i class="mdi mdi-check-circle" style="font-size:1.4rem;color:var(--green);"></i>
+    <div>
+      <div style="font-size:0.9rem;font-weight:600;color:var(--green);">Device créé</div>
+      <div class="mono dim" style="font-size:0.72rem;">{{ device.slug }}</div>
+    </div>
+  </div>
+
+  <p style="font-size:0.8rem;color:var(--text-dim);line-height:1.5;margin-bottom:12px;">
+    <i class="mdi mdi-alert-outline" style="color:var(--cyan);"></i>
+    Copiez cette commande maintenant. Le token d'enrôlement expire dans <strong style="color:var(--cyan);">15 minutes</strong> et ne sera plus affiché.
+  </p>
+
+  <div class="cmd-box" id="init-cmd-box">{{ init_command }}</div>
+
+  <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+    <button class="btn btn-ghost btn-sm" onclick="copyInitCmd()">
+      <i class="mdi mdi-content-copy" style="color:var(--cyan);"></i> Copier
+    </button>
+    <span id="copy-ok" style="display:none;font-size:0.72rem;color:var(--green);">
+      <i class="mdi mdi-check"></i> Copié
+    </span>
+  </div>
+</div>
+<div class="portal-modal-footer">
+  <button class="btn btn-primary btn-sm" onclick="closeAndReload()">
+    <i class="mdi mdi-check"></i> Fermer
+  </button>
+</div>
+
+<script>
+function copyInitCmd() {
+  const text = document.getElementById('init-cmd-box').textContent.trim();
+  navigator.clipboard.writeText(text).then(function() {
+    const ok = document.getElementById('copy-ok');
+    ok.style.display = 'inline';
+    setTimeout(() => { ok.style.display = 'none'; }, 2000);
+  });
+}
+function closeAndReload() {
+  document.getElementById('create-modal').classList.remove('open');
+  window.location.reload();
+}
+</script>

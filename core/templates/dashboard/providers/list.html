@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Providers LLM{% endblock %}
+{% block page_title %}Providers LLM{% endblock %}
+{% block page_subtitle %}// credential vault — {{ workspace.name }}{% endblock %}
+
+{% set active_page = 'providers' %}
+
+{% block content %}
+
+{% if request.query_params.get('created') %}
+  <div class="flash flash-success">Credential ajoutée avec succès.</div>
+{% endif %}
+
+{% if flash %}
+  <div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+<!-- ── LISTE DES CREDENTIALS ── -->
+<div class="card mb-24">
+  <div class="card-header">
+    <div class="card-title">Credentials configurées</div>
+    <span class="mono dim" style="font-size:0.75rem;">{{ credentials | length }} credential(s)</span>
+  </div>
+  <div class="card-body" style="padding: 0;">
+    {% if credentials %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Nom</th>
+          <th>Clé API</th>
+          <th>Scope</th>
+          <th>Test</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cred in credentials %}
+        <tr>
+          <td>
+            <span class="badge badge-active" style="
+              {% if cred.provider == 'anthropic' %}border-color: rgba(218,165,32,0.4); color: #daa520;
+              {% elif cred.provider == 'google' %}border-color: rgba(66,133,244,0.4); color: #4285f4;
+              {% elif cred.provider == 'ollama' %}border-color: rgba(100,200,100,0.4); color: #64c864;
+              {% elif cred.provider == 'openai_compatible' %}border-color: rgba(255,165,0,0.4); color: #ffa500;
+              {% else %}border-color: rgba(0,191,255,0.4); color: var(--cyan);{% endif %}
+            ">
+              <span class="badge-dot"></span>{{ cred.provider }}
+            </span>
+            {% if cred.is_default %}
+              <span class="badge" style="font-size:0.65rem; border-color: rgba(191,0,255,0.4); color: var(--purple); margin-left:4px;">défaut</span>
+            {% endif %}
+          </td>
+          <td class="mono">{{ cred.display_name or '—' }}</td>
+          <td><code style="font-size:0.8rem; opacity:0.7;">{{ cred.key_preview }}</code></td>
+          <td class="mono dim" style="font-size:0.75rem;">
+            {% if cred.workspace_id %}workspace{% else %}global{% endif %}
+          </td>
+          <td>
+            {% if can_edit %}
+            <button class="btn btn-ghost btn-sm"
+                    hx-post="/providers/{{ cred.id }}/test"
+                    hx-target="#test-result-{{ cred.id }}"
+                    hx-indicator="#test-spinner-{{ cred.id }}"
+                    hx-headers='{"Authorization": "Bearer {{ request.cookies.get("hf_token", "") }}"}'
+                    style="font-size:0.75rem;">
+              ▶ Test
+            </button>
+            <span id="test-spinner-{{ cred.id }}" class="htmx-indicator dim" style="font-size:0.75rem;">…</span>
+            <span id="test-result-{{ cred.id }}" class="mono" style="font-size:0.75rem;"></span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if can_edit %}
+            <form method="post" action="/dashboard/w/{{ workspace_slug }}/providers/{{ cred.id }}/delete"
+                  onsubmit="return confirm('Supprimer cette credential ?');"
+                  style="display:inline;">
+              <button type="submit" class="btn btn-ghost btn-sm" style="color: var(--red, #ff4444);">✕</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <div class="empty-state" style="padding: 32px; text-align:center;">
+        <p class="dim">Aucune credential configurée.</p>
+        <p class="dim" style="font-size:0.8rem;">Ajoutez une clé API pour utiliser un provider LLM autre que OpenRouter.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── FORMULAIRE D'AJOUT ── -->
+{% if can_edit %}
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">Ajouter une credential</div>
+  </div>
+  <div class="card-body">
+    <form method="post" action="/dashboard/w/{{ workspace_slug }}/providers/new">
+      <div class="grid-2 mb-16">
+        <div class="form-group">
+          <label class="form-label">Provider</label>
+          <div class="input-glow">
+            <select class="form-select" name="provider" id="prov-select" onchange="updateProviderHints()">
+              <option value="openrouter">OpenRouter</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="google">Google AI</option>
+              <option value="ollama">Ollama (local)</option>
+              <option value="openai_compatible">OpenAI-compatible (LM Studio, LocalAI…)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nom affiché</label>
+          <div class="input-glow">
+            <input class="form-input" type="text" name="display_name" placeholder="ex: Ma clé Anthropic prod" />
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-16">
+        <div class="form-group">
+          <label class="form-label">Clé API</label>
+          <div class="input-glow">
+            <input class="form-input" type="password" name="api_key" id="api-key-input"
+                   placeholder="sk-ant-..." autocomplete="new-password" />
+          </div>
+          <div class="form-hint" id="api-key-hint">Clé secrète du provider. Chiffrée en base (Fernet).</div>
+        </div>
+        <div class="form-group" id="base-url-group" style="display:none;">
+          <label class="form-label">Base URL (optionnel)</label>
+          <div class="input-glow">
+            <input class="form-input" type="text" name="base_url" id="base-url-input"
+                   placeholder="http://ollama:11434" />
+          </div>
+          <div class="form-hint">Laisser vide pour la valeur par défaut.</div>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-16" id="model-group" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">Modèle par défaut</label>
+          <div class="input-glow">
+            <input class="form-input" type="text" name="model" id="model-input"
+                   placeholder="ex: mistral, llama3.1, phi3" />
+          </div>
+          <div class="form-hint">Utilisé lors du test de connexion.</div>
+        </div>
+        <div></div>
+      </div>
+
+      <div class="form-group mb-16">
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+          <input type="checkbox" name="is_default" value="on" class="fm-checkbox" />
+          <span>Définir comme credential par défaut pour ce provider dans ce workspace</span>
+        </label>
+      </div>
+
+      <div class="flex" style="gap:12px; justify-content:flex-end;">
+        <button type="submit" class="btn btn-primary">+ Ajouter</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const providerHints = {
+  openrouter: { placeholder: "sk-or-v1-...", hint: "Clé OpenRouter — https://openrouter.ai/keys", baseUrl: false },
+  anthropic:  { placeholder: "sk-ant-...", hint: "Clé Anthropic — https://console.anthropic.com/", baseUrl: false },
+  google:     { placeholder: "AIza...", hint: "Clé Google AI — https://aistudio.google.com/", baseUrl: false },
+  ollama:           { placeholder: "(vide pour Ollama local)", hint: "Pas de clé requise pour Ollama local.", baseUrl: true },
+  openai_compatible: { placeholder: "(vide ou any-key)", hint: "LLM local compatible OpenAI v1. La clé API est optionnelle.", baseUrl: true },
+};
+
+function updateProviderHints() {
+  const p = document.getElementById('prov-select').value;
+  const h = providerHints[p] || providerHints.openrouter;
+  document.getElementById('api-key-input').placeholder = h.placeholder;
+  document.getElementById('api-key-hint').textContent = h.hint;
+  document.getElementById('base-url-group').style.display = h.baseUrl ? 'block' : 'none';
+  document.getElementById('model-group').style.display = (p === 'openai_compatible') ? 'grid' : 'none';
+}
+
+// Résultats HTMX — formater la réponse JSON en texte lisible
+document.body.addEventListener('htmx:afterRequest', function(evt) {
+  const target = evt.detail.target;
+  if (!target || !target.id.startsWith('test-result-')) return;
+  try {
+    const data = JSON.parse(evt.detail.xhr.responseText);
+    if (data.status === 'ok') {
+      target.innerHTML = '<span style="color: var(--green, #00ff88);">✓ ok — ' + data.model + ' (' + data.latency_ms + 'ms)</span>';
+    } else {
+      target.innerHTML = '<span style="color: var(--red, #ff4444);">✕ ' + (data.error || 'erreur') + '</span>';
+    }
+  } catch(e) {
+    target.textContent = 'erreur';
+  }
+});
+</script>
+{% endblock %}

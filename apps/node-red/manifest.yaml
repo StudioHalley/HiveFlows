@@ -1,0 +1,27 @@
+name: Node-RED
+slug: node-red
+version: "1.0"
+description: "Plateforme de flow-based programming"
+image: nodered/node-red:latest
+type: persistent
+ingress: iframe
+port: 1880
+
+env:
+  - key: NODE_RED_CREDENTIAL_SECRET
+    description: "Secret pour chiffrer les credentials Node-RED"
+    required: true
+    secret: true
+    default: ""
+
+mounts:
+  - host: ".hive/nodered"
+    container: "/data"
+    description: "Flows et données Node-RED"
+
+resources:
+  memory: 256m
+  cpus: "0.5"
+  user: "1000:1000"
+
+icon: mdi-sitemap

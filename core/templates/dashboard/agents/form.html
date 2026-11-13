@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}{% if agent %}Modifier {{ agent.name }}{% else %}Nouvel agent{% endif %}{% endblock %}
+{% block page_title %}{% if agent %}Modifier l'agent{% else %}Nouvel agent{% endif %}{% endblock %}
+{% block page_subtitle %}// agent registry — {{ "edit" if agent else "create" }}{% endblock %}
+
+{% set active_page = 'agents' %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/w/{{ workspace_slug }}/agents" class="btn btn-ghost btn-sm">← Retour</a>
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+  <div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+<form method="post" action="{% if agent %}/dashboard/w/{{ workspace_slug }}/agents/{{ agent.id }}/edit{% else %}/dashboard/w/{{ workspace_slug }}/agents/new{% endif %}">
+  <div style="max-width: 760px;">
+
+    <div class="section-eyebrow">// identité</div>
+    <div class="grid-2 mb-24">
+      <div class="form-group">
+        <label class="form-label">ID (slug unique)</label>
+        <div class="input-glow">
+          <input class="form-input" type="text" name="id"
+                 value="{{ agent.id if agent else '' }}"
+                 placeholder="ex: data-analyst"
+                 {% if agent %}readonly{% endif %}
+                 required />
+        </div>
+        <div class="form-hint">Immuable après création. Lettres, chiffres, tirets.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nom affiché</label>
+        <div class="input-glow">
+          <input class="form-input" type="text" name="name"
+                 value="{{ agent.name if agent else '' }}"
+                 placeholder="ex: Data Analyst"
+                 required />
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <div class="input-glow">
+        <input class="form-input" type="text" name="description"
+               value="{{ agent.description if agent else '' }}"
+               placeholder="Brève description de ce que fait cet agent" />
+      </div>
+    </div>
+
+    <hr class="divider" />
+    <div class="section-eyebrow">// llm</div>
+
+    <div class="grid-2 mb-16">
+      <div class="form-group">
+        <label class="form-label">Provider</label>
+        <div class="input-glow">
+          <select class="form-select" name="llm_provider" id="agent-provider-select" onchange="updateModelHint()">
+            {% set _cur_provider = agent.llm_provider if agent and agent.llm_provider else 'openrouter' %}
+            <option value="openrouter"      {% if _cur_provider == 'openrouter'      %}selected{% endif %}>openrouter</option>
+            <option value="anthropic"       {% if _cur_provider == 'anthropic'       %}selected{% endif %}>anthropic</option>
+            <option value="google"          {% if _cur_provider == 'google'          %}selected{% endif %}>google</option>
+            <option value="ollama"          {% if _cur_provider == 'ollama'          %}selected{% endif %}>ollama</option>
+            <option value="openai_compatible" {% if _cur_provider == 'openai_compatible' %}selected{% endif %}>openai_compatible</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Modèle LLM</label>
+        <div class="input-glow">
+          <input class="form-input" type="text" name="llm_model" id="agent-model-input"
+                 value="{{ agent.llm_model if agent and agent.llm_model else (agent.llm_config.model if agent and agent.llm_config else 'openai/gpt-4o-mini') }}"
+                 placeholder="openai/gpt-4o-mini" />
+        </div>
+        <div class="form-hint" id="model-hint">Identifiant exact du modèle pour ce provider.</div>
+      </div>
+    </div>
+
+    <div class="form-group mb-24">
+      <label class="form-label">Credential provider <span class="form-hint" style="display:inline;">(optionnel — utilise le fallback workspace/global si vide)</span></label>
+      <div class="input-glow">
+        <select class="form-select" name="provider_credential_id">
+          <option value="">-- Fallback automatique --</option>
+          {% for cred in provider_credentials %}
+          <option value="{{ cred.id }}"
+            {% if agent and agent.provider_credential_id and agent.provider_credential_id | string == cred.id %}selected{% endif %}>
+            [{{ cred.provider }}] {{ cred.display_name or cred.key_preview }}{% if cred.is_default %} (défaut){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">System prompt</label>
+      <div class="input-glow">
+        <textarea class="form-textarea" name="system_prompt" rows="5"
+                  placeholder="Instructions de base pour cet agent...">{{ agent.system_prompt if agent else '' }}</textarea>
+      </div>
+    </div>
+
+    <hr class="divider" />
+    <div class="section-eyebrow">// skills & outils</div>
+
+    <div class="grid-2 mb-24">
+      <div class="form-group">
+        <label class="form-label">Skills (JSON array)</label>
+        <div class="input-glow">
+          <textarea class="form-textarea" name="skills" rows="3"
+                    placeholder='["demo", "web-search"]'>{{ agent.skills | tojson if agent and agent.skills else '[]' }}</textarea>
+        </div>
+        <div class="form-hint">Noms des skills dans /skills/</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tools</label>
+        {% set _t = agent.tools if agent and agent.tools else [] %}
+        {% set _disabled = "none" in _t %}
+        <input type="hidden" name="tools" id="tools-hidden" value='{{ _t | tojson }}' />
+        <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+          {% for tool_name, tool_desc in [
+            ("run_script",       "Exécuter un script Python/Bash via le worker"),
+            ("run_skill_script", "Exécuter un script depuis un skill /skills/"),
+            ("url2markdown",     "Convertir une URL en Markdown"),
+            ("get_weather",      "Météo actuelle pour une ville"),
+            ("convert_file",     "Convertir des fichiers (PDF, DOCX, etc.)")
+          ] %}
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+            <input type="checkbox" class="fm-checkbox tool-cb" value="{{ tool_name }}"
+                   {% if tool_name in _t %}checked{% endif %}
+                   {% if _disabled %}disabled{% endif %} />
+            <span><code>{{ tool_name }}</code> <span class="form-hint" style="display:inline;">— {{ tool_desc }}</span></span>
+          </label>
+          {% endfor %}
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-top:4px; opacity:0.7;">
+            <input type="checkbox" id="tools-none-cb" value="none"
+                   class="fm-checkbox"
+                   {% if _disabled %}checked{% endif %} />
+            <span><code>none</code> <span class="form-hint" style="display:inline;">— Désactiver le tool use (modèles sans function calling)</span></span>
+          </label>
+        </div>
+        <div class="form-hint" style="margin-top:8px;">Tout décoché = défaut (run_script + run_skill_script automatique).</div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Sous-agents (JSON array)</label>
+      <div class="input-glow">
+        <textarea class="form-textarea" name="subagents" rows="4"
+                  placeholder='[{"name": "researcher", "description": "...", "system_prompt": "..."}]'>{{ agent.subagents | tojson if agent and agent.subagents else '[]' }}</textarea>
+      </div>
+      <div class="form-hint">Tableau d'objets : name, description, system_prompt</div>
+    </div>
+
+    <hr class="divider" />
+    <div class="section-eyebrow">// contexte</div>
+
+    <div class="form-group" style="max-width: 240px;">
+      <label class="form-label">Fenêtre de contexte (messages)</label>
+      <div class="input-glow">
+        <input class="form-input" type="number" name="context_window_size" min="1" max="500"
+               value="{{ agent.context_window_size if agent else 50 }}" />
+      </div>
+      <div class="form-hint">Nombre de messages envoyés au LLM. L'historique complet reste en DB.</div>
+    </div>
+
+    <hr class="divider" />
+    <div class="section-eyebrow">// human-in-the-loop</div>
+
+    <div class="form-group">
+      <label class="form-label">interrupt_on (JSON object)</label>
+      <div class="input-glow">
+        <textarea class="form-textarea" name="interrupt_on" rows="3"
+                  placeholder='{"run_script": true}'>{{ agent.interrupt_on | tojson if agent and agent.interrupt_on else '{}' }}</textarea>
+      </div>
+      <div class="form-hint">Les tools listés ici déclencheront une pause pour approbation humaine.</div>
+    </div>
+
+    <div class="flex" style="gap: 12px; justify-content: flex-end; margin-top: 32px;">
+      <a href="/dashboard/w/{{ workspace_slug }}/agents" class="btn btn-ghost">Annuler</a>
+      <button type="submit" class="btn btn-primary">
+        {% if agent %}✓ Enregistrer{% else %}+ Créer l'agent{% endif %}
+      </button>
+    </div>
+
+  </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Suggestions de modèles par provider ──
+const _modelSuggestions = {
+  openrouter:       { placeholder: "openai/gpt-4o-mini", hint: "Format: provider/model — voir openrouter.ai/models" },
+  anthropic:        { placeholder: "claude-sonnet-4-20250514", hint: "Ex: claude-haiku-4-5-20251001, claude-opus-4-20250514" },
+  google:           { placeholder: "gemini-1.5-pro", hint: "Ex: gemini-1.5-flash, gemini-2.0-flash" },
+  ollama:           { placeholder: "llama3", hint: "Nom exact du modèle Ollama installé localement" },
+  openai_compatible: { placeholder: "mistral", hint: "Nom exact du modèle exposé par ton endpoint local" },
+};
+function updateModelHint() {
+  const p = document.getElementById('agent-provider-select').value;
+  const s = _modelSuggestions[p] || _modelSuggestions.openrouter;
+  document.getElementById('agent-model-input').placeholder = s.placeholder;
+  document.getElementById('model-hint').textContent = s.hint;
+}
+updateModelHint();
+
+// ── Tools serialization ──
+(function () {
+  const hidden  = document.getElementById('tools-hidden');
+  const noneCb  = document.getElementById('tools-none-cb');
+  const toolCbs = document.querySelectorAll('.tool-cb');
+
+  function serialize() {
+    if (noneCb.checked) { hidden.value = '["none"]'; return; }
+    const selected = [...toolCbs].filter(cb => cb.checked).map(cb => cb.value);
+    hidden.value = JSON.stringify(selected);
+  }
+
+  noneCb.addEventListener('change', () => {
+    toolCbs.forEach(cb => { cb.disabled = noneCb.checked; cb.checked = false; });
+    serialize();
+  });
+
+  toolCbs.forEach(cb => cb.addEventListener('change', serialize));
+
+  document.querySelector('form').addEventListener('submit', serialize);
+})();
+</script>
+{% endblock %}
+

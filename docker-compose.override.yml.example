@@ -1,0 +1,34 @@
+# ============================================================================
+# docker-compose.override.yml — MODE DÉVELOPPEMENT
+#
+# Copie ce fichier en `docker-compose.override.yml` (sans .example) pour activer
+# le hot-reload : le code de l'hôte est monté dans les containers et masque le
+# code baké dans l'image. uvicorn --reload recharge à chaud les changements Python.
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   # ou : HIVE_DEV=1 ./scripts/bootstrap.sh
+#
+# Docker Compose charge automatiquement docker-compose.override.yml s'il existe et
+# le fusionne par-dessus docker-compose.yml.
+#
+# ⚠️ NE PAS déposer ce fichier (override.yml) sur un serveur de PROD : il
+# réactiverait le bind-mount et casserait l'immutabilité de l'image.
+# C'est pourquoi docker-compose.override.yml est gitignoré.
+# ============================================================================
+services:
+
+  core:
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./core:/app
+
+  worker:
+    # Celery n'a pas de --reload natif : après un changement de code,
+    #   docker compose restart worker
+    volumes:
+      - ./workers:/app
+
+  beekeeper:
+    command: uvicorn main:app --host 0.0.0.0 --port 8010 --reload
+    volumes:
+      - ./beekeeper:/app

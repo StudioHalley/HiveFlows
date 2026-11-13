@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}{% if workspace %}Modifier{% else %}Nouveau{% endif %} workspace{% endblock %}
+{% block page_title %}{% if workspace %}Modifier le workspace{% else %}Nouveau workspace{% endif %}{% endblock %}
+{% block page_subtitle %}// workspaces{% endblock %}
+
+{% set active_page = 'workspaces' %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/workspaces" class="btn btn-ghost">Annuler</a>
+{% endblock %}
+
+{% block content %}
+
+{% if flash %}
+  <div class="flash flash-{{ flash.type }}">{{ flash.message }}</div>
+{% endif %}
+
+<div class="card" style="max-width: 600px;">
+  <div class="card-body">
+    <form method="post" action="{% if workspace %}/dashboard/workspaces/{{ workspace.id }}/edit{% else %}/dashboard/workspaces/new{% endif %}">
+
+      <div class="mb-16">
+        <label class="form-label">Nom</label>
+        <input type="text" name="name" value="{{ workspace.name if workspace else '' }}" required
+               class="form-input" placeholder="Mon Equipe"/>
+      </div>
+
+      {% if not workspace %}
+      <div class="mb-16">
+        <label class="form-label">Slug (URL)</label>
+        <input type="text" name="slug" value="" required
+               class="form-input" placeholder="mon-equipe"
+               pattern="[a-z0-9][a-z0-9-]*" title="Lettres minuscules, chiffres et tirets uniquement"/>
+        <div class="mono dim" style="font-size:0.65rem;margin-top:4px;">Unique, URL-friendly (ex: mon-equipe)</div>
+      </div>
+      {% endif %}
+
+      <div class="mb-16">
+        <label class="form-label">Description (optionnel)</label>
+        <textarea name="description" class="form-input" rows="3" placeholder="Description du workspace...">{{ workspace.description if workspace and workspace.description else '' }}</textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary">
+        {% if workspace %}Sauvegarder{% else %}Creer{% endif %}
+      </button>
+    </form>
+  </div>
+</div>
+
+{% endblock %}

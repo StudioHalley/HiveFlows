@@ -1,0 +1,51 @@
+# Secrets
+.env
+*.env.local
+
+# Override de dev (bind-mount + reload) — ne doit jamais atteindre la prod
+docker-compose.override.yml
+
+# Artefacts runtime de update.sh (locaux à chaque node)
+backups/
+.update-prev-sha
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Alembic (garder les migrations, ignorer les caches)
+alembic/versions/__pycache__/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+# Exclude deepagents source reference
+src/deepagents/
+
+# Outils locaux / artefacts perso
+.claude/
+update-report-*.md
+version_check_results.json
+landing/subscribers.yaml

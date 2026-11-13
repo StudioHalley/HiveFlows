@@ -1,0 +1,16 @@
+[Unit]
+Description=HiveFlows Portal Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=portal
+ExecStart=/usr/local/bin/portal-client run
+Restart=always
+RestartSec=5
+# Increase open file limit for concurrent connections
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

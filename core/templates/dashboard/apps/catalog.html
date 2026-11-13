@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Catalogue — {{ workspace.name }}{% endblock %}
+{% block page_title %}Catalogue d'apps{% endblock %}
+{% block breadcrumb_tail %}
+  <span class="breadcrumb-sep">/</span>
+  <a href="/dashboard/w/{{ workspace_slug }}/apps" class="breadcrumb-item">apps</a>
+  <span class="breadcrumb-sep">/</span>
+  <span class="breadcrumb-item">catalogue</span>
+{% endblock %}
+
+{% set active_page = 'apps' %}
+
+{% block head %}
+<style>
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.catalog-card {
+  background: rgba(6,13,26,0.85);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+.catalog-card:hover { border-color: var(--border-hover); }
+.catalog-card.installed { border-color: rgba(0,255,136,0.25); }
+
+.catalog-card-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.catalog-icon {
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,245,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 1.4rem;
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+.catalog-card.installed .catalog-icon { color: var(--green); border-color: rgba(0,255,136,0.3); }
+.catalog-meta { flex: 1; }
+.catalog-name { font-weight: 600; font-size: 0.92rem; }
+.catalog-slug { font-size: 0.68rem; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; margin-top: 2px; }
+.catalog-badges { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+
+.catalog-card-body {
+  padding: 14px 16px;
+  flex: 1;
+}
+.catalog-desc { font-size: 0.8rem; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px; }
+.catalog-image { font-size: 0.68rem; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; }
+
+.catalog-env-list { margin-top: 10px; }
+.catalog-env-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; }
+.catalog-env-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.catalog-env-tag {
+  font-size: 0.65rem; font-family: 'Share Tech Mono', monospace;
+  padding: 2px 7px; border-radius: 4px;
+  background: rgba(191,0,255,0.08); border: 1px solid rgba(191,0,255,0.2);
+  color: #d080ff;
+}
+.catalog-env-tag.required { background: rgba(255,68,102,0.08); border-color: rgba(255,68,102,0.2); color: #ff8099; }
+
+.catalog-card-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.installed-badge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; color: var(--green);
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* Install modal */
+.install-modal {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  align-items: center; justify-content: center;
+}
+.install-modal.open { display: flex; }
+.install-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+}
+.install-box {
+  position: relative; z-index: 1;
+  background: var(--dark2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 460px; max-width: 96vw;
+  max-height: 80vh; overflow-y: auto;
+}
+.install-box-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--cyan);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.install-box-body { padding: 16px 20px; }
+.install-box-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+  <a href="/dashboard/w/{{ workspace_slug }}/apps" class="btn btn-ghost btn-sm">
+    <i class="mdi mdi-arrow-left"></i> Mes apps
+  </a>
+{% endblock %}
+
+{% block content %}
+
+{% if not catalog %}
+<div style="text-align:center;padding:80px 20px;color:var(--text-dim);">
+  <div style="font-size:2.5rem;margin-bottom:16px;opacity:0.4;"><i class="mdi mdi-store-outline"></i></div>
+  <h3 style="font-size:1rem;color:var(--text);margin-bottom:8px;">Catalogue vide</h3>
+  <p style="font-size:0.82rem;">Aucun manifest d'app n'a été chargé au démarrage.</p>
+</div>
+{% else %}
+
+<div class="catalog-grid">
+{% for app in catalog %}
+{% set is_installed = app.slug in installed_slugs %}
+<div class="catalog-card {% if is_installed %}installed{% endif %}">
+
+  <div class="catalog-card-header">
+    <div class="catalog-icon">
+      {% if app.icon %}
+        <i class="mdi {{ app.icon }}"></i>
+      {% else %}
+        <i class="mdi mdi-cube-outline"></i>
+      {% endif %}
+    </div>
+    <div class="catalog-meta">
+      <div class="catalog-name">{{ app.name }}</div>
+      <div class="catalog-slug">{{ app.slug }} v{{ app.version }}</div>
+      <div class="catalog-badges">
+        <span class="badge badge-active" style="font-size:0.62rem;">{{ app.app_type }}</span>
+        {% if app.ingress_mode != 'none' %}
+        <span class="badge badge-pending" style="font-size:0.62rem;">{{ app.ingress_mode }}</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="catalog-card-body">
+    <div class="catalog-desc">{{ app.description or '—' }}</div>
+    <div class="catalog-image"><i class="mdi mdi-docker" style="margin-right:4px;color:var(--text-dim);"></i>{{ app.image }}</div>
+
+    {% if app.env_schema %}
+    <div class="catalog-env-list">
+      <div class="catalog-env-label">Variables d'env</div>
+      <div class="catalog-env-tags">
+        {% for field in app.env_schema %}
+        <span class="catalog-env-tag {% if field.required %}required{% endif %}">
+          {{ field.key }}{% if field.required %}*{% endif %}
+        </span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if app.resources %}
+    <div style="margin-top:10px;font-size:0.68rem;color:var(--text-dim);font-family:'Share Tech Mono',monospace;">
+      <i class="mdi mdi-chip" style="margin-right:4px;"></i>{{ app.resources.get('cpus', '?') }} CPU &nbsp;
+      <i class="mdi mdi-memory" style="margin-right:4px;"></i>{{ app.resources.get('memory', '?') }} RAM
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="catalog-card-footer">
+    {% if is_installed %}
+      <div class="installed-badge">
+        <i class="mdi mdi-check-circle-outline"></i> Installée
+      </div>
+      <a href="/dashboard/w/{{ workspace_slug }}/apps" class="btn btn-ghost btn-sm">
+        <i class="mdi mdi-cog-outline"></i> Gérer
+      </a>
+    {% else %}
+      <span style="font-size:0.72rem;color:var(--text-dim);">
+        {% if app.default_port %}<i class="mdi mdi-lan-connect" style="margin-right:4px;"></i>port {{ app.default_port }}{% endif %}
+      </span>
+      <button class="btn btn-primary btn-sm" onclick="openInstallModal('{{ app.slug }}')">
+        <i class="mdi mdi-download-outline"></i> Installer
+      </button>
+    {% endif %}
+  </div>
+
+</div><!-- end catalog-card -->
+{% endfor %}
+</div><!-- end catalog-grid -->
+
+{% endif %}
+
+<!-- ── Install modals ── -->
+{% for app in catalog %}
+{% if app.slug not in installed_slugs %}
+<div class="install-modal" id="install-modal-{{ app.slug }}">
+  <div class="install-backdrop" onclick="closeInstallModal('{{ app.slug }}')"></div>
+  <div class="install-box">
+    <div class="install-box-header">
+      <span>
+        {% if app.icon %}<i class="mdi {{ app.icon }}" style="margin-right:8px;"></i>{% endif %}
+        Installer {{ app.name }}
+      </span>
+      <button onclick="closeInstallModal('{{ app.slug }}')" style="background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:1.1rem;">✕</button>
+    </div>
+    <form method="post" action="/dashboard/w/{{ workspace_slug }}/apps/install">
+      <input type="hidden" name="app_slug" value="{{ app.slug }}">
+      <div class="install-box-body">
+
+        {% if app.env_schema %}
+        <p style="font-size:0.78rem;color:var(--text-dim);margin-bottom:16px;">
+          Configurez les variables d'environnement requises avant de lancer l'installation.
+        </p>
+        {% for field in app.env_schema %}
+        <div class="mb-16">
+          <label class="form-label">
+            {{ field.key }}
+            {% if field.required %}<span style="color:#ff4466;">*</span>{% endif %}
+            {% if field.description %}<br><span style="font-weight:normal;font-size:0.72rem;color:var(--text-dim);">{{ field.description }}</span>{% endif %}
+          </label>
+          <input
+            type="{% if field.secret %}password{% else %}text{% endif %}"
+            name="env_{{ field.key }}"
+            class="form-input"
+            placeholder="{{ field.default or '' }}"
+            {% if field.required %}required{% endif %}
+          />
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="font-size:0.82rem;color:var(--text-dim);">
+          Cette app ne nécessite aucune variable d'environnement.<br>
+          Cliquez sur <strong>Installer</strong> pour démarrer.
+        </p>
+        {% endif %}
+
+        <div style="margin-top:16px;padding:10px 14px;background:rgba(0,245,255,0.04);border:1px solid var(--border);border-radius:6px;font-size:0.72rem;color:var(--text-dim);">
+          <i class="mdi mdi-information-outline" style="color:var(--cyan);margin-right:6px;"></i>
+          L'installation se fait en arrière-plan (pull de l'image Docker). Suivez l'état dans <strong>Mes apps</strong>.
+        </div>
+      </div>
+      <div class="install-box-footer">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="closeInstallModal('{{ app.slug }}')">Annuler</button>
+        <button type="submit" class="btn btn-primary btn-sm">
+          <i class="mdi mdi-download-outline"></i> Installer
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openInstallModal(slug) {
+  const m = document.getElementById('install-modal-' + slug);
+  if (m) m.classList.add('open');
+}
+function closeInstallModal(slug) {
+  const m = document.getElementById('install-modal-' + slug);
+  if (m) m.classList.remove('open');
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.install-modal.open').forEach(m => m.classList.remove('open'));
+  }
+});
+</script>
+{% endblock %}
